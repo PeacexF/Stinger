@@ -1,0 +1,5 @@
+emails.txt
+results/
+venv/
+requirements.txt
+smtp_worker

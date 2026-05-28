@@ -1,0 +1,54 @@
+# ===========================================
+#  SMTP-Stinger  —  config.yaml
+#  Required fields MUST be set before running.
+# ===========================================
+
+smtp:
+  # The domain used in HELO/EHLO and MAIL FROM.
+  # Use a REAL domain you control with:
+  # A record  → points to your sending IP
+  # PTR record → reverse DNS matches this hostname
+  # SPF record → e.g.  v=spf1 ip4:<YOUR_IP> ~all
+
+  # Leaving these blank will cause SMTP-Stinger to refuse to start.
+  helo_hostname: ""          # e.g. "mail.yourdomain.com"
+  mail_from: ""              # e.g. "stinger@yourdomain.com"
+
+  # Connection settings
+  connect_timeout_sec: 10
+  command_timeout_sec: 15
+  port: 25                   # 25 for direct MX, 587 for submission (rare)
+  try_tls: true              # attempt STARTTLS where offered
+
+concurrency:
+  global_limit: 100          # max simultaneous SMTP connections total
+  per_domain_limit: 2        # max simultaneous connections to any one domain
+
+dns:
+  # How long to cache MX lookups and catch-all results (seconds)
+  mx_cache_ttl: 3600
+  catch_all_cache_ttl: 3600
+  # DNS resolvers to use (leave empty to use system default)
+  resolvers: []
+  # - "8.8.8.8"
+  # - "1.1.1.1"
+
+retry:
+  max_attempts: 3
+  # Seconds to wait between retries (exponential base)
+  backoff_base_sec: 2
+
+output:
+  # Directory where results are written
+  output_dir: "./results"
+  # Filename for clean email list (250/251 responses, non-catch-all treated as valid per config)
+  valid_txt: "valid_emails.txt"
+  # Filename for full per-email JSONL log
+  full_jsonl: "results.jsonl"
+
+input:
+  emails_file: "./emails.txt"
+
+logging:
+  level: "INFO"               # DEBUG | INFO | WARNING | ERROR
+  show_progress: true
