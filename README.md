@@ -1,7 +1,7 @@
 # SMTP-Stinger
 
 High-performance SMTP email verifier. Python async orchestration + Go low-level socket worker.
-
+Will update README soon !!
 ---
 
 ## Architecture

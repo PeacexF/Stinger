@@ -1,8 +1,9 @@
-// smtp_worker.go — SMTP-Stinger low-level prober
+// smtp_worker.go - Stinger's Go low level probing
+// Compiles into a binary by `builder[.]py` via a `stinger build` command
 // Reads one JSON job from stdin, performs SMTP probe, writes one JSON result to stdout.
 // Protocol:
-// stdin → {"email":"...","mx":"...","helo":"...","mail_from":"...","timeout_sec":10,"try_tls":true}
-// stdout → {"email":"...","mx":"...","smtp_code":250,"smtp_message":"...","error":"","tls":true}
+// stdin -> {"email":"...","mx":"...","helo":"...","mail_from":"...","timeout_sec":10,"try_tls":true}  <- Job
+// stdout → {"email":"...","mx":"...","smtp_code":250,"smtp_message":"...","error":"","tls":true} 	   <- Result
 
 package main
 

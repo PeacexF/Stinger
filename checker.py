@@ -1,4 +1,4 @@
-# SMTP-Stinger — checker.py
+# Outdated, was separated into files, will remove this one from the repo in the future
 # High-performance async SMTP email verifier.
 # Orchestrates the Go smtp_worker binary for low-level socket work.
 
