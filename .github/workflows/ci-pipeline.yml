@@ -18,7 +18,7 @@ jobs:
       - name: Environment
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.26'
           cache: true
 
       - name: Fetch Modules
