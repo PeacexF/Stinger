@@ -3,6 +3,8 @@
 # Called by the `stinger parse` cmd, values that can be passed are: path/to/file.[csv][txt] | ./dir | path/to/dir/*
 # Maybe the parsers will be remade in Go in the future (because parsing a lot of big .csv files will be slow with the current logic)
 
+# This file will be moved to legacy in the next commit.
+
 from __future__ import annotations
 
 import csv 

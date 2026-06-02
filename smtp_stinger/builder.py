@@ -9,25 +9,29 @@ import subprocess
 import sys
 from pathlib import Path
 
+PACKAGE_DIR = Path(__file__).parent
 
-def _go_source() -> Path | None:
-    candidates = [
-        Path(__file__).parent / "smtp_worker.go",        # bundled inside package
-        Path(__file__).parent.parent / "smtp_worker.go", # project root (dev)
-    ]
-    for p in candidates:
-        if p.exists():
-            return p
-    return None
-
-
-def output_path() -> Path:
-    return Path(__file__).parent / "smtp_worker"
+BINARIES = {
+    "smtp_worker": {
+        "out":  PACKAGE_DIR / "smtp_worker",
+        "src_candidates": [
+            PACKAGE_DIR / "smtp_worker.go",
+            PACKAGE_DIR.parent / "smtp_worker.go",
+        ],
+        "is_package": False,
+    },
+    "parse_worker": {
+        "out":  PACKAGE_DIR / "parse_worker",
+        "src_candidates": [
+            PACKAGE_DIR / "parse",
+            PACKAGE_DIR.parent / "parse",
+        ],
+        "is_package": True,
+    },
+}
 
 
 def build(verbose: bool = True) -> bool:
-    # Compile smtp_worker.go → src/smtp_worker binary.
-
     go = shutil.which("go")
     if not go:
         _err(
@@ -36,33 +40,47 @@ def build(verbose: bool = True) -> bool:
         )
         return False
 
-    src = _go_source()
-    if src is None:
-        _err(
-            "smtp_worker.go not found.\n"
-            "  Make sure you have the full smtp-stinger source."
-        )
-        return False
+    all_ok = True
+    for name, spec in BINARIES.items():
+        ok = _build_one(go, name, spec, verbose)
+        if not ok:
+            all_ok = False
 
-    out = output_path()
+    return all_ok
+
+
+def _build_one(go: str, name: str, spec: dict, verbose: bool) -> bool:
+    out: Path = spec["out"]
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    if verbose:
-        print(f"[stinger build] go build  {src.name} → {out}")
+    src = None
+    for candidate in spec["src_candidates"]:
+        if candidate.exists():
+            src = candidate
+            break
 
-    result = subprocess.run(
-        [go, "build", "-o", str(out), str(src)],
-        capture_output=True,
-        text=True,
-    )
+    if src is None:
+        _err(f"Source for {name} not found. Tried: {spec['src_candidates']}")
+        return False
+
+    if verbose:
+        label = str(src.relative_to(src.parent.parent)) if src.parent != src else src.name
+        print(f"[stinger build] go build  {label} → {out.relative_to(out.parent.parent)}")
+
+    if spec["is_package"]:
+        cmd = [go, "build", "-o", str(out), str(src)]
+    else:
+        cmd = [go, "build", "-o", str(out), str(src)]
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
 
     if result.returncode != 0:
-        _err(f"Compilation failed:\n{result.stderr}")
+        _err(f"{name} compilation failed:\n{result.stderr}")
         return False
 
     size_kb = out.stat().st_size // 1024
     if verbose:
-        print(f"[stinger build] ✓ OK — {out}  ({size_kb} KB)")
+        print(f"[stinger build] ✓ {name}  ({size_kb} KB)")
 
     return True
 
