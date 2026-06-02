@@ -8,27 +8,25 @@ on:
 
 jobs:
   go:
+    name: Execute Go Verification Matrix
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout Source
         uses: actions/checkout@v4
 
+      - name: Environment
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
           cache: true
 
+      - name: Fetch Modules
         run: |
           if [ ! -f go.mod ]; then
             go mod init stinger
           fi
           go mod download
 
-        run: |
-          go test -race -v -covermode=atomic -coverprofile=coverage.txt ./...
-
-        uses: actions/upload-artifact@v4
-        with:
-          name: go-coverage-telemetry
-          path: coverage.txt
-          if-no-files-found: ignore
+      - name: Run Low-Level Network Tests
+        run: go test -race -v -covermode=atomic -coverprofile=coverage.txt ./...
