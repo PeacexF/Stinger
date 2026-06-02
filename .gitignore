@@ -2,9 +2,11 @@ emails.txt
 results/
 venv/
 smtp_worker
+parse_worker
 checker.py
 error.txt
 smtp_stinger.egg*
 legacy/
 *pycache*
 config.yaml
+emails/

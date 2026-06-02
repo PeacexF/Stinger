@@ -23,10 +23,10 @@ BINARIES = {
     "parse_worker": {
         "out":  PACKAGE_DIR / "parse_worker",
         "src_candidates": [
-            PACKAGE_DIR / "parse",
-            PACKAGE_DIR.parent / "parse",
+            PACKAGE_DIR / "main.go",
+            PACKAGE_DIR.parent / "smtp_stinger" / "main.go",
         ],
-        "is_package": True,
+        "is_package": False,
     },
 }
 
