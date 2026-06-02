@@ -7,9 +7,10 @@ import asyncio
 import re
 import time
 from collections import defaultdict
-from typing import Optional
 
 import dns.exception
+import dns.name
+import dns.resolver
 
 from .dns_cache import DNSCache
 from .models import EmailResult, Status, classify_worker_result
@@ -36,11 +37,20 @@ class Verifier:
         self._catch_all_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         self.max_attempts = cfg["retry"]["max_attempts"]
         self.backoff_base = cfg["retry"]["backoff_base_sec"]
-        # Progress counters (updated externally by the runner)
         self.total: int = 0
         self.done: int = 0
         self._progress_lock = asyncio.Lock()
 
+    async def smoke_test_dns(self) -> str | None:
+        # resolve gmail.com MX as a quick sanity check before the main run
+        # because dns have been fucking me up for the past hour and i don't have logging in this shit to understand what's happening
+        try:
+            mxs = await self.dns.get_mx("gmail.com")
+            if not mxs:
+                return "DNS smoke test failed: gmail.com returned no MX records. Check your resolvers in config.yaml."
+            return None
+        except Exception as e:
+            return f"DNS smoke test failed: {type(e).__name__}: {e}. Check your resolvers in config.yaml."
 
     async def verify(self, email: str) -> EmailResult:
         email = email.strip().lower()
@@ -52,11 +62,38 @@ class Verifier:
 
         domain = email.split("@")[1]
 
-        # MX
         try:
             mxs = await self.dns.get_mx(domain)
-        except dns.exception.DNSException:
-            mxs = []
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+            return EmailResult(
+                email=email,
+                status=Status.INVALID,
+                reason="no MX records (NXDOMAIN or no answer)",
+            )
+        except dns.name.EmptyLabel:
+            return EmailResult(
+                email=email,
+                status=Status.INVALID,
+                reason="malformed domain (empty label)",
+            )
+        except dns.resolver.NoNameservers:
+            return EmailResult(
+                email=email,
+                status=Status.UNKNOWN,
+                reason="DNS lookup failed: all nameservers refused to answer",
+            )
+        except dns.exception.Timeout:
+            return EmailResult(
+                email=email,
+                status=Status.UNKNOWN,
+                reason="DNS lookup timed out",
+            )
+        except dns.exception.DNSException as e:
+            return EmailResult(
+                email=email,
+                status=Status.UNKNOWN,
+                reason=f"DNS error: {type(e).__name__}: {e}",
+            )
 
         if not mxs:
             return EmailResult(
@@ -66,15 +103,13 @@ class Verifier:
             )
 
         is_catch_all = await self._detect_catch_all(domain, mxs)
-
-        # SMTP probe with retry + MX fallback
         return await self._probe_with_retry(email, domain, mxs, is_catch_all)
 
     async def tick(self) -> None:
         async with self._progress_lock:
             self.done += 1
 
-    # Catch-all detection
+
     async def _detect_catch_all(self, domain: str, mxs: list[str]) -> bool:
         cached = self.dns.get_catch_all(domain)
         if cached is not None:
@@ -96,18 +131,18 @@ class Verifier:
                     self.dns.set_catch_all(domain, False)
                     return False
 
-            # assume not catch-all
             self.dns.set_catch_all(domain, False)
             return False
 
     async def _smtp_once(self, email: str, mx: str) -> dict:
-        # One SMTP probe, respecting global + per-domain semaphores
         domain = email.split("@")[1]
         async with self.global_sem:
             async with self._domain_sems[domain]:
                 return await call_worker(build_job(email, mx, self.smtp_cfg))
 
-    async def _probe_with_retry(self, email: str, domain: str, mxs: list[str], is_catch_all: bool) -> EmailResult:
+    async def _probe_with_retry(
+        self, email: str, domain: str, mxs: list[str], is_catch_all: bool
+    ) -> EmailResult:
         attempts = 0
         last_res: dict = {}
         last_status = Status.UNKNOWN
@@ -120,10 +155,9 @@ class Verifier:
                 status, reason = classify_worker_result(res)
 
                 if status == Status.VALID:
-                    final = Status.CATCH_ALL if is_catch_all else Status.VALID
                     return EmailResult(
                         email=email,
-                        status=final,
+                        status=Status.CATCH_ALL if is_catch_all else Status.VALID,
                         smtp_code=res.get("smtp_code"),
                         smtp_message=res.get("smtp_message"),
                         mx_used=mx,

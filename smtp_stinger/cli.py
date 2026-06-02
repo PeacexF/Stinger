@@ -101,7 +101,7 @@ def doctor(config):
     cfg = load_config(config, require_smtp=True)
     helo = cfg["smtp"]["helo_hostname"]
     mail_from = cfg["smtp"]["mail_from"]
-    ok = run_doctor(helo, mail_from)
+    ok = run_doctor(helo, mail_from, cfg)
     sys.exit(0 if ok else 1)
 
 
@@ -220,6 +220,18 @@ async def _run_check(emails: list[str], cfg: dict):
     from .models import Status
 
     verifier = Verifier(cfg)
+
+    # Smoke test DNS before burning through the whole list
+    dns_err = await verifier.smoke_test_dns()
+    if dns_err:
+        click.echo(f"\n  {click.style('ERROR', fg='red')}: {dns_err}\n", err=True)
+        click.echo("  Hint: add explicit resolvers to config.yaml:", err=True)
+        click.echo("    dns:", err=True)
+        click.echo("      resolvers:", err=True)
+        click.echo("        - \"1.1.1.1\"", err=True)
+        click.echo("        - \"8.8.8.8\"\n", err=True)
+        sys.exit(1)
+
     verifier.total = len(emails)
     show_progress = cfg["logging"]["show_progress"]
 
