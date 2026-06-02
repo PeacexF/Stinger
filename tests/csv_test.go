@@ -1,9 +1,11 @@
-package stinger
+package tests
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	stinger "stinger/smtp_stinger/parse"
 )
 
 func TestParseCSV(t *testing.T) {
@@ -41,9 +43,9 @@ func TestParseCSV(t *testing.T) {
 				t.Fatalf("failed to create fixture file: %v", err)
 			}
 
-			resultsChan := make(chan JobResult, 10)
+			resultsChan := make(chan stinger.JobResult, 10)
 
-			err = ParseCSV(tmpFilePath, resultsChan)
+			err = stinger.ParseCSV(tmpFilePath, resultsChan)
 			if err != nil {
 				t.Fatalf("ParseCSV returned an unexpected error: %v", err)
 			}

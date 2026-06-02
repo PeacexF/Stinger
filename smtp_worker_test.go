@@ -1,20 +1,3 @@
-// Expected output:
-/*
-% go test -v ./...
-=== RUN   TestProbe_TableDriven
-=== RUN   TestProbe_TableDriven/Successful_Standard_Delivery_Path
-=== RUN   TestProbe_TableDriven/Successful_STARTTLS_Upgrade_Sequence
-=== RUN   TestProbe_TableDriven/Server_Rejects_Mail_From_Sender_Address
-=== RUN   TestProbe_TableDriven/Invalid_Server_Banner_Code
---- PASS: TestProbe_TableDriven (0.05s)
-    --- PASS: TestProbe_TableDriven/Successful_Standard_Delivery_Path (0.00s)
-    --- PASS: TestProbe_TableDriven/Successful_STARTTLS_Upgrade_Sequence (0.05s)
-    --- PASS: TestProbe_TableDriven/Server_Rejects_Mail_From_Sender_Address (0.00s)
-    --- PASS: TestProbe_TableDriven/Invalid_Server_Banner_Code (0.00s)
-PASS
-ok      stinger 0.968s
-*/
-
 package main
 
 import (
