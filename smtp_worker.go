@@ -17,6 +17,9 @@ import (
 	"time"
 )
 
+// for tests
+var dialTimeout = net.DialTimeout
+
 // Input / Output
 type Job struct {
 	Email      string `json:"email"`
@@ -64,7 +67,7 @@ func probe(job Job) Result {
 	timeout := time.Duration(job.TimeoutSec) * time.Second
 	addr := fmt.Sprintf("%s:%d", job.MX, job.Port) // There is no support for ipv6
 
-	conn, err := net.DialTimeout("tcp", addr, timeout)
+	conn, err := dialTimeout("tcp", addr, timeout)
 	if err != nil {
 		return errResult(job, fmt.Sprintf("connect failed: %v", err))
 	}

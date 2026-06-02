@@ -1,7 +1,6 @@
 emails.txt
 results/
 venv/
-requirements.txt
 smtp_worker
 checker.py
 error.txt

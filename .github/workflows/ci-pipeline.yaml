@@ -1,0 +1,34 @@
+name: Stinger Core Quality Gate
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+
+    steps:
+        uses: actions/checkout@v4
+
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: true
+
+        run: |
+          if [ ! -f go.mod ]; then
+            go mod init stinger
+          fi
+          go mod download
+
+        run: |
+          go test -race -v -covermode=atomic -coverprofile=coverage.txt ./...
+
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-coverage-telemetry
+          path: coverage.txt
+          if-no-files-found: ignore
