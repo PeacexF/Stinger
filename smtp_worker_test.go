@@ -1,29 +1,66 @@
-// Unit test of the smtp_worker.
 // Expected output:
 /*
-SMTP-Stinger % go test -v ./...
+% go test -v ./...
 === RUN   TestProbe_TableDriven
 === RUN   TestProbe_TableDriven/Successful_Standard_Delivery_Path
+=== RUN   TestProbe_TableDriven/Successful_STARTTLS_Upgrade_Sequence
 === RUN   TestProbe_TableDriven/Server_Rejects_Mail_From_Sender_Address
 === RUN   TestProbe_TableDriven/Invalid_Server_Banner_Code
---- PASS: TestProbe_TableDriven (0.01s)
+--- PASS: TestProbe_TableDriven (0.05s)
     --- PASS: TestProbe_TableDriven/Successful_Standard_Delivery_Path (0.00s)
+    --- PASS: TestProbe_TableDriven/Successful_STARTTLS_Upgrade_Sequence (0.05s)
     --- PASS: TestProbe_TableDriven/Server_Rejects_Mail_From_Sender_Address (0.00s)
     --- PASS: TestProbe_TableDriven/Invalid_Server_Banner_Code (0.00s)
 PASS
-ok      stinger 0.863s
+ok      stinger 0.968s
 */
 
 package main
 
 import (
 	"bufio"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"fmt"
+	"math/big"
 	"net"
 	"strings"
 	"testing"
 	"time"
 )
+
+// generate self-signed cert for mock TLS
+func generateTestCertificate() (tls.Certificate, error) {
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			Organization: []string{"Stinger Testing Group"},
+		},
+		NotBefore:             time.Now().Add(-1 * time.Hour),
+		NotAfter:              time.Now().Add(1 * time.Hour),
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+
+	return tls.Certificate{
+		Certificate: [][]byte{derBytes},
+		PrivateKey:  priv,
+	}, nil
+}
 
 func TestProbe_TableDriven(t *testing.T) {
 	tests := []struct {
@@ -37,13 +74,27 @@ func TestProbe_TableDriven(t *testing.T) {
 			name: "Successful Standard Delivery Path",
 			job: Job{
 				Email:      "target@victim.com",
-				MX:         "localhost", // Use localhost for clean resolution
+				MX:         "localhost",
 				Helo:       "stinger-probe",
 				MailFrom:   "spoof@attacker.com",
 				TimeoutSec: 5,
 				TryTLS:     false,
 			},
 			serverMode:    "happy",
+			expectedCode:  250,
+			expectedError: "",
+		},
+		{
+			name: "Successful STARTTLS Upgrade Sequence",
+			job: Job{
+				Email:      "target@secure-mx.com",
+				MX:         "localhost",
+				Helo:       "stinger-probe",
+				MailFrom:   "spoof@attacker.com",
+				TimeoutSec: 5,
+				TryTLS:     true,
+			},
+			serverMode:    "tls_upgrade",
 			expectedCode:  250,
 			expectedError: "",
 		},
@@ -82,7 +133,6 @@ func TestProbe_TableDriven(t *testing.T) {
 			}
 			defer listener.Close()
 
-			// Extract the dynamically allocated port
 			_, portStr, _ := net.SplitHostPort(listener.Addr().String())
 			var allocatedPort int
 			fmt.Sscanf(portStr, "%d", &allocatedPort)
@@ -107,14 +157,12 @@ func TestProbe_TableDriven(t *testing.T) {
 
 				reader := bufio.NewReader(conn)
 
-				// Send banner
 				if tt.serverMode == "bad_banner" {
 					fmt.Fprintf(conn, "554 Server overloaded, go away\r\n")
 					return
 				}
 				fmt.Fprintf(conn, "220 mail.victim.com ESMTP Postfix\r\n")
 
-				// Conversation Loop
 				for {
 					line, err := reader.ReadString('\n')
 					if err != nil {
@@ -125,7 +173,29 @@ func TestProbe_TableDriven(t *testing.T) {
 
 					switch {
 					case strings.HasPrefix(cmd, "EHLO") || strings.HasPrefix(cmd, "HELO"):
-						fmt.Fprintf(conn, "250-mail.victim.com Hello\r\n250 HELP\r\n")
+						if tt.serverMode == "tls_upgrade" {
+							fmt.Fprintf(conn, "250-mail.secure-mx.com Hello\r\n250-STARTTLS\r\n250 HELP\r\n")
+						} else {
+							fmt.Fprintf(conn, "250-mail.victim.com Hello\r\n250 HELP\r\n")
+						}
+
+					case strings.HasPrefix(cmd, "STARTTLS"):
+						fmt.Fprintf(conn, "220 2.0.0 Ready to start TLS\r\n")
+
+						// Generate certificate configuration dynamically
+						cert, err := generateTestCertificate()
+						if err != nil {
+							return
+						}
+						tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
+
+						tlsConn := tls.Server(conn, tlsConfig)
+						if err := tlsConn.Handshake(); err != nil {
+							return
+						}
+
+						conn = tlsConn
+						reader = bufio.NewReader(conn)
 
 					case strings.HasPrefix(cmd, "MAIL FROM"):
 						if tt.serverMode == "reject_sender" {
@@ -148,7 +218,6 @@ func TestProbe_TableDriven(t *testing.T) {
 
 			<-serverReady
 
-			// SUT
 			res := probe(testJob)
 
 			if tt.expectedError == "" {
