@@ -1,5 +1,4 @@
-// I probably shouldn't have made it so complicated by making the pasing logic in Go, but okay i guess, i'll remake it
-
+// Parsing
 package main
 
 import (

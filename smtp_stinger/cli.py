@@ -1,7 +1,5 @@
 # CLI module
-# Uses click
-# Entry point for all commands
-
+# Entry point for all commands: init, build, doctor, check, parse, stats
 
 from __future__ import annotations
 
@@ -33,9 +31,11 @@ def _echo_banner():
 @click.group()
 @click.version_option(__version__, prog_name="stinger")
 def cli():
-    """Stinger — high-performance SMTP email verifier."""
+    """SMTP-Stinger — high-performance SMTP email verifier."""
     pass
 
+
+# init 
 
 @cli.command()
 @click.argument("dest", default="config.yaml", metavar="[CONFIG_PATH]")
@@ -60,6 +60,8 @@ def init(dest):
     click.echo("  → Run  stinger doctor  to validate your DNS setup\n")
 
 
+# build
+
 @cli.command("build")
 def build_cmd():
     """
@@ -74,6 +76,8 @@ def build_cmd():
     success = do_build(verbose=True)
     sys.exit(0 if success else 1)
 
+
+# doctor 
 
 @cli.command()
 @click.option("--config", "-c", default="config.yaml", show_default=True,
@@ -100,6 +104,8 @@ def doctor(config):
     ok = run_doctor(helo, mail_from)
     sys.exit(0 if ok else 1)
 
+
+# check
 
 @cli.command()
 @click.argument("emails_file", default=None, required=False, metavar="[EMAILS_FILE]")
@@ -233,9 +239,9 @@ async def _run_check(emails: list[str], cfg: dict):
     elapsed = time.monotonic() - start
     rate = len(emails) / elapsed if elapsed > 0 else 0
 
+    # Final newline after progress
     if show_progress:
         click.echo()
-
 
     # Results summary
     c = writer.counters
@@ -265,6 +271,116 @@ def _print_progress(done: int, total: int, pct: float, counters: dict):
     line = f"\r  [{bar}] {pct:5.1f}%  {done}/{total}  ✓{v} ✗{i} ?{u}"
     click.echo(line, nl=False, err=False)
 
+
+
+# parse
+
+@cli.command()
+@click.argument("sources", nargs=-1, required=True, metavar="SOURCE [SOURCE ...]")
+@click.option("--out", "-o", default="emails.txt", show_default=True,
+              help="Output file to write deduplicated emails to")
+@click.option("--append", "-a", is_flag=True, default=False,
+              help="Append to output file instead of overwriting")
+@click.option("--workers", "-w", default=4, show_default=True, type=int,
+              help="Number of parallel Go parsing workers")
+@click.option("--no-summary", is_flag=True, default=False,
+              help="Suppress per-file breakdown, only show totals")
+def parse(sources, out, append, workers, no_summary):
+    """
+    Extract and deduplicate emails from .txt and .csv files (Go-powered).
+
+    \b
+    SOURCE can be:
+      a single file        stinger parse emails.csv
+      multiple files       stinger parse a.csv b.txt
+      a directory          stinger parse ./data
+      a glob pattern       stinger parse './data/*.csv'
+
+    All .txt and .csv files are parsed concurrently by the Go worker pool.
+    Deduplication is done in a single-threaded Go consumer (FNV-64 hashing).
+    Output is written directly to disk by Go — no Python buffering.
+
+    \b
+    Examples:
+      stinger parse leads.csv
+      stinger parse ./data
+      stinger parse ./data/*.csv --out clean.txt
+      stinger parse a.csv b.csv --append --out master.txt
+      stinger parse ./data --workers 8
+    """
+    from .parse_worker import run_parse, PARSE_BINARY
+
+    if not PARSE_BINARY.exists():
+        click.echo(
+            f"\n  ERROR: parse_worker binary not found.\n"
+            f"  Run:  stinger build\n",
+            err=True,
+        )
+        sys.exit(1)
+
+    out_path = Path(out)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Count existing emails for append reporting before Go overwrites the file
+    existing_count = 0
+    append_source = None
+    if append and out_path.exists():
+        existing_count = sum(
+            1 for line in out_path.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")
+        )
+        append_source = out_path
+
+    result = run_parse(
+        sources=list(sources),
+        output_path=out_path,
+        workers=workers,
+        append_to=append_source,
+    )
+
+    # Report
+    click.echo(f"\n  {'─' * 52}")
+    click.echo("  stinger parse")
+    click.echo(f"  {'─' * 52}")
+
+    if result.error and not result.files_parsed:
+        click.echo(f"\n  {click.style('ERROR', fg='red')}: {result.error}\n")
+        sys.exit(1)
+
+    if result.files_skipped:
+        click.echo(f"\n  {click.style('Skipped', fg='yellow')} ({len(result.files_skipped)} file(s)):")
+        for p in result.files_skipped:
+            click.echo(f"    x {p}")
+
+    if not result.files_parsed:
+        click.echo("\n  No supported files (.txt, .csv) found to parse.\n")
+        sys.exit(1)
+
+    if not no_summary:
+        click.echo(f"\n  {click.style('Parsed', fg='green')} ({len(result.files_parsed)} file(s)):")
+        for fpath, count in result.per_file_unique.items():
+            label = click.style(f"{count:>6} unique", fg="cyan")
+            click.echo(f"    + {label}  {fpath}")
+
+    click.echo()
+    click.echo(f"  Raw emails found   : {result.total_raw}")
+    click.echo(f"  Duplicates removed : {click.style(str(result.duplicates_removed), fg='yellow')}")
+    click.echo(f"  Unique emails      : {click.style(str(result.unique), fg='green')}")
+
+    if result.unique == 0:
+        click.echo("\n  No email addresses found in the provided files.\n")
+        sys.exit(1)
+
+    click.echo()
+    if append and existing_count:
+        click.echo(f"  Merged with {existing_count} existing emails in {out_path}")
+        click.echo(f"  Final unique total  : {click.style(str(result.unique), fg='green')}")
+    click.echo(f"  {'─' * 52}")
+    click.echo(f"  -> {click.style(str(out_path), fg='cyan')}  ({result.unique} emails)")
+    click.echo(f"  {'─' * 52}\n")
+    click.echo(f"  Next:  stinger check {out_path}\n")
+
+# stats
 
 @cli.command()
 @click.argument("jsonl_file", metavar="RESULTS_JSONL")
@@ -324,6 +440,6 @@ def stats(jsonl_file):
 
     click.echo(f"  {'─' * 48}\n")
 
-# Entry
+
 def main():
     cli()

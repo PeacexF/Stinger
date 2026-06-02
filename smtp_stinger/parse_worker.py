@@ -1,4 +1,6 @@
-# comments a bit later
+# Interface to the compiled Go parse_worker binary
+# Handles file collection (dirs, globs, explicit paths) in Python
+# then delegates all parsing and deduplication to Go
 
 from __future__ import annotations
 
@@ -13,7 +15,7 @@ SUPPORTED_EXTENSIONS = {".txt", ".csv"}
 
 @dataclass
 class ParseResult:
-    emails: list[str]
+    emails: list[str]                    # deduplicated, lowercased — read from output file
     total_raw: int
     duplicates_removed: int
     unique: int
@@ -24,6 +26,8 @@ class ParseResult:
 
 
 def collect_files(sources: list[str]) -> tuple[list[Path], list[Path]]:
+    # Expand sources (files, directories, globs) into concrete .txt/.csv paths
+    # Returns (accepted, skipped)
     accepted: list[Path] = []
     skipped: list[Path] = []
     seen: set[Path] = set()
@@ -70,6 +74,10 @@ def run_parse(
     workers: int = 4,
     append_to: Path | None = None,
 ) -> ParseResult:
+    # Collect files from sources, run the Go parse_worker binary,
+    # and return a ParseResult. Output is written directly to output_path by Go.
+    # If append_to is set and exists, its contents are prepended to the job
+    # paths as a pre-seeded .txt so Go deduplicates across old + new together
 
     if not PARSE_BINARY.exists():
         return ParseResult(
@@ -92,6 +100,8 @@ def run_parse(
 
     paths = [str(p.resolve()) for p in accepted]
 
+    # If appending, pass the existing file as an extra input so Go deduplicates
+    # everything in one pass. strip it from per_file_unique in the result
     existing_file: Path | None = None
     if append_to and append_to.exists():
         existing_file = append_to
@@ -129,6 +139,7 @@ def run_parse(
     if data.get("error"):
         return _err_result(skipped, data["error"])
 
+    # Read the emails Go wrote to disk
     emails: list[str] = []
     if output_path.exists():
         emails = [
@@ -136,11 +147,14 @@ def run_parse(
             if line.strip()
         ]
 
+    # Remove the existing_file entry from per_file_unique (it's internal bookkeeping)
     per_file = data.get("per_file_unique") or {}
     if existing_file:
         per_file.pop(str(existing_file.resolve()), None)
 
+    # Merge skipped
     all_skipped = list(data.get("files_skipped") or []) + [str(p) for p in skipped]
+    # Remove existing_file from files_parsed display too
     files_parsed = [
         f for f in (data.get("files_parsed") or [])
         if existing_file is None or f != str(existing_file.resolve())
