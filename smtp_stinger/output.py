@@ -1,6 +1,5 @@
 # Output writers and stats summariser for SMTP-Stinger
 
-
 from __future__ import annotations
 
 import json
@@ -23,6 +22,7 @@ class ResultWriter:
         self._vf: IO | None = None
         self._jf: IO | None = None
         self.counters: dict[str, int] = defaultdict(int)
+        self.sub_counters: dict[str, int] = defaultdict(int)
         self._checkpoint = checkpoint
 
     def open(self) -> None:
@@ -40,6 +40,8 @@ class ResultWriter:
             self._vf.flush()
 
         self.counters[result.status.value] += 1
+        if result.sub_status:
+            self.sub_counters[result.sub_status.value] += 1
 
         if self._checkpoint:
             self._checkpoint.mark(result.email)
@@ -61,6 +63,7 @@ class ResultWriter:
 def summarise_jsonl(jsonl_path: Path) -> dict:
     # Read results.jsonl and return stats
     counts: dict[str, int] = defaultdict(int)
+    sub_counts: dict[str, int] = defaultdict(int)
     total_ms = 0
     total = 0
     catch_all_domains: set[str] = set()
@@ -77,18 +80,23 @@ def summarise_jsonl(jsonl_path: Path) -> dict:
                 continue
             total += 1
             status = rec.get("status", "unknown")
+            sub_status = rec.get("sub_status")
             counts[status] += 1
+            if sub_status:
+                sub_counts[sub_status] += 1
             total_ms += rec.get("duration_ms", 0)
             if rec.get("is_catch_all_domain"):
                 domain = rec["email"].split("@")[1] if "@" in rec["email"] else ""
                 if domain:
                     catch_all_domains.add(domain)
-            if status == "error":
-                errors.append(f"  {rec['email']}: {rec.get('reason', '?')}")
+            if status in ("error", "unknown"):
+                reason = rec.get("reason", "?")
+                errors.append(f"  {rec['email']}: [{sub_status or status}] {reason}")
 
     return {
         "total": total,
         "counts": dict(counts),
+        "sub_counts": dict(sub_counts),
         "avg_duration_ms": round(total_ms / total, 1) if total else 0,
         "catch_all_domains": sorted(catch_all_domains),
         "sample_errors": errors[:10],

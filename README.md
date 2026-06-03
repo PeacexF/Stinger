@@ -29,6 +29,10 @@ stinger init
 
 # Fill in helo_hostname and mail_from in config.yaml, then validate
 stinger doctor
+
+# Parse your list of emails into a list of `emails_file` in config
+# Beforehand, make a dir in the Stinger/ with all the .csv and .txt files that contain emails that need to be checked
+stinger parse ./emails/*
 ```
 
 ---
@@ -84,6 +88,38 @@ Example output:
   ── Summary ───────────────────────────────────────
   All checks passed
   5/5 checks passed
+```
+
+---
+
+### `stinger parse`
+Recommended usage:  
+make a directory with all your email-filled files (.csv and .txt supported)  
+
+Run command:
+```bash
+stinger parse ./emails/*
+```
+
+All parsed emails are now in the **emails_file** from config
+
+Example output:
+```bash
+  ────────────────────────────────────────────────────
+  stinger parse
+  ────────────────────────────────────────────────────
+
+  Parsed (2 file(s)):
+    +    467 unique  /Users/peace/Desktop/Dev/SMTP-Stinger/emails/hotmail.txt
+    +  45330 unique  /Users/peace/Desktop/Dev/SMTP-Stinger/emails/orders.csv
+
+  Raw emails found   : 53224
+  Duplicates removed : 7427
+  Unique emails      : 45797
+
+  ────────────────────────────────────────────────────
+  -> emails.txt  (45797 emails)
+  ────────────────────────────────────────────────────
 ```
 
 ---
@@ -154,26 +190,49 @@ Output:
   ────────────────────────────────────────────────
 ```
 
+#### --help
+for more info on commands, run: `stinger [cmd] --help`
+
 ---
 
 ## Project structure
 
 ```
-├── pyproject.toml      packaging
-├── config.yaml         configuration, created by `stinger init`
-├── smtp_worker.go      Go low level probing
+├── go.mod
+├── pyproject.toml
+├── requirements.txt
+├── config.yaml             configuration, created by `stinger init`
+├── emails/                 folder with the initial emails list (recommended)
+│   ├── hotmail.txt
+│   └── orders.csv
+├── results/                
+│   ├── results.jsonl       full data on the checked emails
+│   └── valid_emails.txt    valid (250/251 code) checked emails
+├── emails.txt              parsed, deduplicated list of emails
+├── smtp_worker.go          smtp probe -> smtp_worker
 ├── smtp_stinger/
-│   ├── __init__.py     version
-│   ├── builder.py      compiles go ino executable binary
-│   ├── cli.py          CLI part
-│   ├── config.py       config creation
-│   ├── dns_cache.py    DNS helpers and caching
-│   ├── doctor.py       validation of records
-│   ├── models.py       shared models
-│   ├── output.py       output writters
-│   ├── verifier.py     core verifier
-│   ├── smtp_worker     a binary that will be created after `stinger build`
-│   └── worker.py       go binary interface
+│   ├── __init__.py         version
+│   ├── builder.py          build go binaries
+│   ├── cli.py              cli module
+│   ├── config.py           config creation
+│   ├── dns_cache.py        DNS helpers and caching
+│   ├── doctor.py           validation of records
+│   ├── models.py           shared models
+│   ├── output.py           output writters
+│   ├── parse_worker.py     calls the parse_worker go binary
+│   ├── verifier.py         core verifier
+│   ├── worker.py           calls the smtp_worker go binary
+│   ├── parse_worker        go binaries, both built by `stinger build`
+│   ├── smtp_worker
+│   ├── main.go             main parsing module -> parse_worker
+│   ├── parse/
+│   │   ├── csv.go          csv parse
+│   │   ├── engine.go       parsing coordination
+│   │   └── txt.go          txt parse
+├── tests/                  everything below is for testing purposes only
+│   ├── csv_test.go
+│   └── txt_test.go
+└── smtp_worker_test.go
 ```
 
 ---

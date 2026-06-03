@@ -511,6 +511,7 @@ def stats(jsonl_file):
     s = summarise_jsonl(path)
     total = s["total"]
     counts = s["counts"]
+    sub_counts = s.get("sub_counts", {})
 
     click.echo(f"\n  {'─' * 48}")
     click.echo(f"  SMTP-Stinger — Stats  ({path.name})")
@@ -535,6 +536,31 @@ def stats(jsonl_file):
     click.echo()
     click.echo(f"  Avg duration    : {s['avg_duration_ms']} ms/email")
 
+    # Sub-status breakdown
+    if sub_counts:
+        sub_groups = {
+            "valid":     (["confirmed"],                                          "green"),
+            "catch_all": (["catch_all"],                                          "cyan"),
+            "invalid":   (["mailbox_not_found","mailbox_full","domain_rejected",
+                           "spam_block","syntax_error","no_mx","malformed"],      "red"),
+            "unknown":   (["greylisted","rate_limited","mailbox_temp",
+                           "connect_failed","dns_timeout","dns_error",
+                           "worker_error","temp_failure"],                        "yellow"),
+        }
+        click.echo()
+        click.echo("  Sub-status breakdown:")
+        for group, (keys, color) in sub_groups.items():
+            group_total = sum(sub_counts.get(k, 0) for k in keys)
+            if not group_total:
+                continue
+            click.echo(f"  {click.style(group, fg=color)}")
+            for key in keys:
+                n = sub_counts.get(key, 0)
+                if not n:
+                    continue
+                pct = n / total * 100 if total else 0
+                click.echo(f"    {key:<22}  {n:>6}  ({pct:5.1f}%)")
+
     if s["catch_all_domains"]:
         click.echo(f"\n  Catch-all domains ({len(s['catch_all_domains'])}):")
         for d in s["catch_all_domains"][:20]:
@@ -543,7 +569,7 @@ def stats(jsonl_file):
             click.echo(f"    … and {len(s['catch_all_domains']) - 20} more")
 
     if s["sample_errors"]:
-        click.echo(f"\n  Sample errors:")
+        click.echo(f"\n  Sample unknowns/errors:")
         for e in s["sample_errors"]:
             click.echo(f"    {e}")
 

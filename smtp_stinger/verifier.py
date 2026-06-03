@@ -1,6 +1,5 @@
 # Core verifier — orchestrates DNS, catch-all detection, retries, concurrency
 
-
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +12,7 @@ import dns.name
 import dns.resolver
 
 from .dns_cache import DNSCache
-from .models import EmailResult, Status, classify_worker_result
+from .models import EmailResult, Status, SubStatus, classify_worker_result
 from .worker import build_job, get_pool
 
 CATCH_ALL_PROBE_PREFIX = "stinger-catch_all-checker-XYZ"
@@ -45,7 +44,6 @@ class Verifier:
 
     async def smoke_test_dns(self) -> str | None:
         # resolve gmail.com MX as a quick sanity check before the main run
-        # because dns have been fucking me up for the past hour and i don't have logging in this shit to understand what's happening
         try:
             mxs = await self.dns.get_mx("gmail.com")
             if not mxs:
@@ -65,7 +63,10 @@ class Verifier:
 
         if "@" not in email or not _valid_email(email):
             return EmailResult(
-                email=email, status=Status.INVALID, reason="malformed email address"
+                email=email,
+                status=Status.INVALID,
+                sub_status=SubStatus.MALFORMED,
+                reason="malformed email address",
             )
 
         domain = email.split("@")[1]
@@ -76,30 +77,35 @@ class Verifier:
             return EmailResult(
                 email=email,
                 status=Status.INVALID,
+                sub_status=SubStatus.NO_MX,
                 reason="no MX records (NXDOMAIN or no answer)",
             )
         except dns.name.EmptyLabel:
             return EmailResult(
                 email=email,
                 status=Status.INVALID,
+                sub_status=SubStatus.MALFORMED,
                 reason="malformed domain (empty label)",
             )
         except dns.resolver.NoNameservers:
             return EmailResult(
                 email=email,
                 status=Status.UNKNOWN,
+                sub_status=SubStatus.DNS_ERROR,
                 reason="DNS lookup failed: all nameservers refused to answer",
             )
         except dns.exception.Timeout:
             return EmailResult(
                 email=email,
                 status=Status.UNKNOWN,
+                sub_status=SubStatus.DNS_TIMEOUT,
                 reason="DNS lookup timed out",
             )
         except dns.exception.DNSException as e:
             return EmailResult(
                 email=email,
                 status=Status.UNKNOWN,
+                sub_status=SubStatus.DNS_ERROR,
                 reason=f"DNS error: {type(e).__name__}: {e}",
             )
 
@@ -107,6 +113,7 @@ class Verifier:
             return EmailResult(
                 email=email,
                 status=Status.INVALID,
+                sub_status=SubStatus.NO_MX,
                 reason="no MX records (NXDOMAIN or no answer)",
             )
 
@@ -155,18 +162,20 @@ class Verifier:
         attempts = 0
         last_res: dict = {}
         last_status = Status.UNKNOWN
+        last_sub_status = SubStatus.TEMP_FAILURE
         last_reason = ""
 
         for attempt in range(self.max_attempts):
             for mx in mxs:
                 attempts += 1
                 res = await self._smtp_once(email, mx)
-                status, reason = classify_worker_result(res)
+                status, sub_status, reason = classify_worker_result(res)
 
                 if status == Status.VALID:
                     return EmailResult(
                         email=email,
                         status=Status.CATCH_ALL if is_catch_all else Status.VALID,
+                        sub_status=SubStatus.CATCH_ALL if is_catch_all else sub_status,
                         smtp_code=res.get("smtp_code"),
                         smtp_message=res.get("smtp_message"),
                         mx_used=mx,
@@ -181,6 +190,7 @@ class Verifier:
                     return EmailResult(
                         email=email,
                         status=Status.INVALID,
+                        sub_status=sub_status,
                         smtp_code=res.get("smtp_code"),
                         smtp_message=res.get("smtp_message"),
                         mx_used=mx,
@@ -191,14 +201,17 @@ class Verifier:
                         reason=reason,
                     )
 
-                last_res, last_status, last_reason = res, status, reason
+                last_res, last_status, last_sub_status, last_reason = (
+                    res, status, sub_status, reason
+                )
 
             if attempt < self.max_attempts - 1:
-                await asyncio.sleep(self.backoff_base * (2**attempt))
+                await asyncio.sleep(self.backoff_base * (2 ** attempt))
 
         return EmailResult(
             email=email,
             status=last_status,
+            sub_status=last_sub_status,
             smtp_code=last_res.get("smtp_code"),
             smtp_message=last_res.get("smtp_message"),
             mx_used=mxs[0] if mxs else None,
