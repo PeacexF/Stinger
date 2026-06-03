@@ -121,7 +121,9 @@ def doctor(config):
               help="Suppress live progress counter")
 @click.option("--dry-run", is_flag=True, default=False,
               help="Parse and deduplicate input, print count, then exit")
-def check(emails_file, config, out, limit, per_domain, no_progress, dry_run):
+@click.option("--resume", default=None, metavar="CHECKPOINT",
+              help="Resume from a checkpoint.json file left by a previous interrupted run")
+def check(emails_file, config, out, limit, per_domain, no_progress, dry_run, resume):
     """
     Verify a list of email addresses via SMTP.
 
@@ -213,14 +215,37 @@ def check(emails_file, config, out, limit, per_domain, no_progress, dry_run):
     click.echo(f"  output       : {cfg['output']['output_dir']}")
     click.echo(f"  {'─' * 52}\n")
 
-    asyncio.run(_run_check(emails, cfg))
+    asyncio.run(_run_check(emails, cfg, resume_path=resume))
 
 
-async def _run_check(emails: list[str], cfg: dict):
+async def _run_check(emails: list[str], cfg: dict, resume_path: str | None = None):
+    import signal
     from .verifier import Verifier
     from .output import ResultWriter
     from .models import Status
     from .worker import init_pool
+    from .checkpoint import Checkpoint
+
+    out_dir = Path(cfg["output"]["output_dir"])
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # Resume handling
+    is_resume = False
+    if resume_path:
+        try:
+            completed = Checkpoint.load(Path(resume_path))
+        except ValueError as e:
+            click.echo(f"\n  {click.style('ERROR', fg='red')}: {e}\n", err=True)
+            sys.exit(1)
+        skipped = len([e for e in emails if e in completed])
+        emails = [e for e in emails if e not in completed]
+        is_resume = True
+        click.echo(f"  {click.style('resume', fg='cyan')}     : skipping {skipped} already-completed emails")
+        click.echo(f"  remaining    : {len(emails)}")
+        click.echo(f"  {'─' * 52}\n")
+        if not emails:
+            click.echo("  All emails already completed. Nothing to do.\n")
+            return
 
     verifier = Verifier(cfg)
 
@@ -248,28 +273,88 @@ async def _run_check(emails: list[str], cfg: dict):
     verifier.total = len(emails)
     show_progress = cfg["logging"]["show_progress"]
 
+    # Checkpoint setup
+    checkpoint = Checkpoint(
+        output_dir=out_dir,
+        emails_file=cfg["input"].get("emails_file", "emails.txt"),
+        total=len(emails),
+    )
+
+    # Signal handling
+    stop_event = asyncio.Event()
+    interrupt_count = 0
+
+    def _handle_sigint(*_):
+        nonlocal interrupt_count
+        interrupt_count += 1
+        if interrupt_count == 1:
+            click.echo(
+                f"\n\n  {click.style('Interrupted', fg='yellow')} — "
+                "waiting for in-flight checks to finish...\n"
+                "  Press Ctrl+C again to force quit (results so far will be saved).\n",
+                err=True,
+            )
+            stop_event.set()
+        else:
+            click.echo(
+                f"\n  {click.style('Force quit', fg='red')} — saving checkpoint and exiting.\n",
+                err=True,
+            )
+            checkpoint.save()
+            # Shut down the pool best-effort before hard exit
+            asyncio.get_event_loop().run_until_complete(pool.shutdown())
+            sys.exit(1)
+
+    loop = asyncio.get_event_loop()
+    loop.add_signal_handler(signal.SIGINT, _handle_sigint)
+
     start = time.monotonic()
+    interrupted = False
 
-    async with pool:
-        with ResultWriter(cfg) as writer:
-            async def process(email: str):
-                result = await verifier.verify(email)
-                await verifier.tick()
-                writer.write(result)
-                if show_progress:
-                    pct = verifier.done / verifier.total * 100
-                    _print_progress(verifier.done, verifier.total, pct, writer.counters)
+    try:
+        async with pool:
+            with ResultWriter(cfg, append=is_resume, checkpoint=checkpoint) as writer:
+                async def process(email: str):
+                    # Don't start new work once stop is requested
+                    if stop_event.is_set():
+                        return
+                    result = await verifier.verify(email)
+                    await verifier.tick()
+                    writer.write(result)
+                    if show_progress:
+                        pct = verifier.done / verifier.total * 100
+                        _print_progress(verifier.done, verifier.total, pct, writer.counters)
 
-            await asyncio.gather(*[process(e) for e in emails])
+                await asyncio.gather(*[process(e) for e in emails])
 
+    except asyncio.CancelledError:
+        interrupted = True
+    finally:
+        loop.remove_signal_handler(signal.SIGINT)
+
+    interrupted = interrupted or stop_event.is_set()
     elapsed = time.monotonic() - start
-    rate = len(emails) / elapsed if elapsed > 0 else 0
+    completed_count = verifier.done
+    rate = completed_count / elapsed if elapsed > 0 else 0
 
     # Final newline after progress
     if show_progress:
         click.echo()
 
-    # Results summary
+    if interrupted:
+        # Save checkpoint so the run can be resumed
+        checkpoint.save()
+        click.echo(f"\n  {click.style('═' * 52, fg='yellow')}")
+        click.echo(f"  Interrupted after {elapsed:.1f}s  ({completed_count}/{len(emails)} processed)\n")
+        click.echo(f"  Checkpoint saved → {checkpoint.path}")
+        click.echo(f"  Resume with:")
+        click.echo(f"    stinger check --resume {checkpoint.path}\n")
+    else:
+        # Clean run — remove any leftover checkpoint
+        checkpoint.delete()
+        click.echo(f"\n  {'═' * 52}")
+        click.echo(f"  Finished in {elapsed:.1f}s  ({rate:.1f} emails/sec)\n")
+
     c = writer.counters
     click.echo(f"\n  {'═' * 52}")
     click.echo(f"  Finished in {elapsed:.1f}s  ({rate:.1f} emails/sec)\n")
@@ -279,11 +364,9 @@ async def _run_check(emails: list[str], cfg: dict):
     click.echo(f"  {click.style('? unknown   ', fg='yellow')} {c.get('unknown', 0)}")
     click.echo(f"  {click.style('! error     ', fg='magenta')} {c.get('error', 0)}")
 
-    out_dir = cfg["output"]["output_dir"]
-    valid_name = cfg["output"]["valid_txt"]
-    jsonl_name = cfg["output"]["full_jsonl"]
-    click.echo(f"\n  → {out_dir}/{valid_name}")
-    click.echo(f"  → {out_dir}/{jsonl_name}")
+    out_dir_s = cfg["output"]["output_dir"]
+    click.echo(f"\n  → {out_dir_s}/{cfg['output']['valid_txt']}")
+    click.echo(f"  → {out_dir_s}/{cfg['output']['full_jsonl']}")
     click.echo(f"  {'═' * 52}\n")
 
 

@@ -14,29 +14,35 @@ from .models import EmailResult, Status
 class ResultWriter:
     # Streams into valid.txt and results.jsonl
 
-    def __init__(self, cfg: dict):
+    def __init__(self, cfg: dict, append: bool = False, checkpoint=None):
         out_dir = Path(cfg["output"]["output_dir"])
         out_dir.mkdir(parents=True, exist_ok=True)
         self.valid_path = out_dir / cfg["output"]["valid_txt"]
         self.jsonl_path = out_dir / cfg["output"]["full_jsonl"]
+        self._mode = "a" if append else "w"
         self._vf: IO | None = None
         self._jf: IO | None = None
         self.counters: dict[str, int] = defaultdict(int)
+        self._checkpoint = checkpoint
 
     def open(self) -> None:
-        self._vf = open(self.valid_path, "w")
-        self._jf = open(self.jsonl_path, "w")
+        self._vf = open(self.valid_path, self._mode)
+        self._jf = open(self.jsonl_path, self._mode)
 
     def write(self, result: EmailResult) -> None:
         assert self._vf and self._jf, "call open() first"
-        # Every email → JSONL
+
         self._jf.write(result.to_jsonl() + "\n")
         self._jf.flush()
-        # 250/251 emails → valid list (both valid and catch_all statuses)
+
         if result.status in (Status.VALID, Status.CATCH_ALL):
             self._vf.write(result.email + "\n")
             self._vf.flush()
+
         self.counters[result.status.value] += 1
+
+        if self._checkpoint:
+            self._checkpoint.mark(result.email)
 
     def close(self) -> None:
         if self._vf:
