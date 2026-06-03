@@ -301,9 +301,10 @@ async def _run_check(emails: list[str], cfg: dict, resume_path: str | None = Non
                 err=True,
             )
             checkpoint.save()
-            # Shut down the pool best-effort before hard exit
-            asyncio.get_event_loop().run_until_complete(pool.shutdown())
-            sys.exit(1)
+            # Cancel all running tasks — the event loop will unwind them
+            # triggering the `async with pool:` __aexit__ which shuts workers down
+            for task in asyncio.all_tasks():
+                task.cancel()
 
     loop = asyncio.get_event_loop()
     loop.add_signal_handler(signal.SIGINT, _handle_sigint)
@@ -318,14 +319,22 @@ async def _run_check(emails: list[str], cfg: dict, resume_path: str | None = Non
                     # Don't start new work once stop is requested
                     if stop_event.is_set():
                         return
-                    result = await verifier.verify(email)
+                    try:
+                        result = await verifier.verify(email)
+                    except asyncio.CancelledError:
+                        # Task was cancelled (force quit) — stop silently
+                        return
                     await verifier.tick()
                     writer.write(result)
                     if show_progress:
                         pct = verifier.done / verifier.total * 100
                         _print_progress(verifier.done, verifier.total, pct, writer.counters)
 
-                await asyncio.gather(*[process(e) for e in emails])
+                # return_exceptions=True so one cancellation doesn't immediately propagate and skip results from other tasks
+                await asyncio.gather(
+                    *[process(e) for e in emails],
+                    return_exceptions=True,
+                )
 
     except asyncio.CancelledError:
         interrupted = True
@@ -356,8 +365,6 @@ async def _run_check(emails: list[str], cfg: dict, resume_path: str | None = Non
         click.echo(f"  Finished in {elapsed:.1f}s  ({rate:.1f} emails/sec)\n")
 
     c = writer.counters
-    click.echo(f"\n  {'═' * 52}")
-    click.echo(f"  Finished in {elapsed:.1f}s  ({rate:.1f} emails/sec)\n")
     click.echo(f"  {click.style('✓ valid     ', fg='green')} {c.get('valid', 0)}")
     click.echo(f"  {click.style('~ catch_all ', fg='cyan')} {c.get('catch_all', 0)}")
     click.echo(f"  {click.style('✗ invalid   ', fg='red')} {c.get('invalid', 0)}")
