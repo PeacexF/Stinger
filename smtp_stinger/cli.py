@@ -201,12 +201,14 @@ def check(emails_file, config, out, limit, per_domain, no_progress, dry_run):
     )
 
     # Print run summary
+    _pool_size = max(4, min(cfg['concurrency']['global_limit'] // 2, 32))
     click.echo(f"  {'─' * 52}")
     click.echo(f"  emails       : {len(emails)}")
     click.echo(f"  helo         : {cfg['smtp']['helo_hostname']}")
     click.echo(f"  mail_from    : {cfg['smtp']['mail_from']}")
     click.echo(f"  concurrency  : {cfg['concurrency']['global_limit']} global / "
                f"{cfg['concurrency']['per_domain_limit']} per domain")
+    click.echo(f"  workers      : {_pool_size} persistent Go processes")
     click.echo(f"  retries      : {cfg['retry']['max_attempts']} max attempts")
     click.echo(f"  output       : {cfg['output']['output_dir']}")
     click.echo(f"  {'─' * 52}\n")
@@ -218,6 +220,7 @@ async def _run_check(emails: list[str], cfg: dict):
     from .verifier import Verifier
     from .output import ResultWriter
     from .models import Status
+    from .worker import init_pool
 
     verifier = Verifier(cfg)
 
@@ -232,21 +235,32 @@ async def _run_check(emails: list[str], cfg: dict):
         click.echo("        - \"8.8.8.8\"\n", err=True)
         sys.exit(1)
 
+    # Pool size: one persistent worker per 2 concurrent slots, min 4, max 32
+    # More workers = more parallelism inside Go, but each holds an OS process
+    # It was previously 45000 OS calls for 45000 emails, now it's a pool of Go workers
+    global_limit = cfg["concurrency"]["global_limit"]
+    pool_size = max(4, min(global_limit // 2, 32))
+    pool = init_pool(
+        size=pool_size,
+        job_timeout_sec=cfg["smtp"].get("connect_timeout_sec", 10),
+    )
+
     verifier.total = len(emails)
     show_progress = cfg["logging"]["show_progress"]
 
     start = time.monotonic()
 
-    with ResultWriter(cfg) as writer:
-        async def process(email: str):
-            result = await verifier.verify(email)
-            await verifier.tick()
-            writer.write(result)
-            if show_progress:
-                pct = verifier.done / verifier.total * 100
-                _print_progress(verifier.done, verifier.total, pct, writer.counters)
+    async with pool:
+        with ResultWriter(cfg) as writer:
+            async def process(email: str):
+                result = await verifier.verify(email)
+                await verifier.tick()
+                writer.write(result)
+                if show_progress:
+                    pct = verifier.done / verifier.total * 100
+                    _print_progress(verifier.done, verifier.total, pct, writer.counters)
 
-        await asyncio.gather(*[process(e) for e in emails])
+            await asyncio.gather(*[process(e) for e in emails])
 
     elapsed = time.monotonic() - start
     rate = len(emails) / elapsed if elapsed > 0 else 0

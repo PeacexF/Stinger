@@ -14,7 +14,7 @@ import dns.resolver
 
 from .dns_cache import DNSCache
 from .models import EmailResult, Status, classify_worker_result
-from .worker import build_job, call_worker
+from .worker import build_job, get_pool
 
 CATCH_ALL_PROBE_PREFIX = "stinger-catch_all-checker-XYZ"
 
@@ -30,6 +30,8 @@ class Verifier:
         self.cfg = cfg
         self.smtp_cfg = cfg["smtp"]
         self.dns = DNSCache(cfg)
+        # Global semaphore still controls max concurrent in-flight jobs
+        # so we don't overwhelm the pool with more work than it can process
         self.global_sem = asyncio.Semaphore(cfg["concurrency"]["global_limit"])
         self._domain_sems: dict[str, asyncio.Semaphore] = defaultdict(
             lambda: asyncio.Semaphore(cfg["concurrency"]["per_domain_limit"])
@@ -47,10 +49,16 @@ class Verifier:
         try:
             mxs = await self.dns.get_mx("gmail.com")
             if not mxs:
-                return "DNS smoke test failed: gmail.com returned no MX records. Check your resolvers in config.yaml."
+                return (
+                    "DNS smoke test failed: gmail.com returned no MX records. "
+                    "Check your resolvers in config.yaml."
+                )
             return None
         except Exception as e:
-            return f"DNS smoke test failed: {type(e).__name__}: {e}. Check your resolvers in config.yaml."
+            return (
+                f"DNS smoke test failed: {type(e).__name__}: {e}. "
+                "Check your resolvers in config.yaml."
+            )
 
     async def verify(self, email: str) -> EmailResult:
         email = email.strip().lower()
@@ -134,11 +142,12 @@ class Verifier:
             self.dns.set_catch_all(domain, False)
             return False
 
+
     async def _smtp_once(self, email: str, mx: str) -> dict:
         domain = email.split("@")[1]
         async with self.global_sem:
             async with self._domain_sems[domain]:
-                return await call_worker(build_job(email, mx, self.smtp_cfg))
+                return await get_pool().call(build_job(email, mx, self.smtp_cfg))
 
     async def _probe_with_retry(
         self, email: str, domain: str, mxs: list[str], is_catch_all: bool
