@@ -312,6 +312,8 @@ One JSON object per line for every email processed:
 
 ## DNS setup guide
 
+### Full setup guide: [link](setup-guide.md)  
+
 Both `helo_hostname` and `mail_from` must use a real domain you control.
 `stinger doctor` will tell you exactly what to fix, but here's the full picture:
 

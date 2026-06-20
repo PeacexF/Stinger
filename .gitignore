@@ -11,3 +11,4 @@ legacy/
 config.yaml
 emails/
 stinger.zip
+.pytest*
