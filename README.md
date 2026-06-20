@@ -230,8 +230,8 @@ for more info on commands, run: `stinger [cmd] --help`
 │   │   ├── engine.go       parsing coordination
 │   │   └── txt.go          txt parse
 ├── tests/                  everything below is for testing purposes only
-│   ├── csv_test.go
-│   └── txt_test.go
+│   ├── go/
+│   └── python/
 └── smtp_worker_test.go
 ```
 
