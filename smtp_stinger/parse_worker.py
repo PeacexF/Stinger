@@ -14,6 +14,7 @@ SUPPORTED_EXTENSIONS = {
     ".txt", ".csv", ".json", ".jsonl", ".yaml", ".yml",
     ".toml", ".ini", ".html", ".htm", ".docx", ".doc",
     ".xlsx", ".xls", ".pptx", ".ppt", ".odt", ".ods",
+    ".odp", ".pdf",
 }
 
 
