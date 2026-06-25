@@ -1,5 +1,7 @@
 github.com/dslipak/pdf v0.0.2 h1:djAvcM5neg9Ush+zR6QXB+VMJzR6TdnX766HPIg1JmI=
 github.com/dslipak/pdf v0.0.2/go.mod h1:2L3SnkI9cQwnAS9gfPz2iUoLC0rUZwbucpbKi5R1mUo=
+github.com/nwaples/rardecode/v2 v2.2.5 h1:L5doqgGfQwI7qADJMqnkrSB86rpPsqQDrHeO0HWa5JY=
+github.com/nwaples/rardecode/v2 v2.2.5/go.mod h1:7uz379lSxPe6j9nvzxUZ+n7mnJNgjsRNb6IbvGVHRmw=
 github.com/saracen/go7z v0.0.0-20191010121135-9c09b6bd7fda h1:h+YpzUB/bGVJcLqW+d5GghcCmE/A25KbzjXvWJQi/+o=
 github.com/saracen/go7z v0.0.0-20191010121135-9c09b6bd7fda/go.mod h1:MSotTrCv1PwoR8QgU1JurEx+lNNbtr25I+m0zbLyAGw=
 github.com/saracen/go7z-fixtures v0.0.0-20190623165746-aa6b8fba1d2f h1:PF9WV5j/x6MT+x/sauUHd4objCvJbZb0wdxZkHSdd5A=
