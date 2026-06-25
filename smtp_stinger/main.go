@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"os"
 
-	parse "stinger/smtp_stinger/parse"
+	parse "github.com/PeacexF/Stinger/smtp_stinger/parse"
 )
 
 type Job struct {

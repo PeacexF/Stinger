@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	stinger "stinger/smtp_stinger/parse"
+	parse "github.com/PeacexF/Stinger/smtp_stinger/parse"
 )
 
 func TestParseTXT(t *testing.T) {
@@ -44,9 +44,9 @@ func TestParseTXT(t *testing.T) {
 				t.Fatalf("failed to create fixture file: %v", err)
 			}
 
-			resultsChan := make(chan stinger.JobResult, 10)
+			resultsChan := make(chan parse.JobResult, 10)
 
-			err = stinger.Parse(tmpFilePath, resultsChan)
+			err = parse.Parse(tmpFilePath, resultsChan)
 			if err != nil {
 				t.Fatalf("ParseTXT returned an unexpected error: %v", err)
 			}
