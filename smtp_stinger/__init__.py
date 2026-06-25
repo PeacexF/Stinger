@@ -3,6 +3,7 @@
 # Checks emails in bulk
 # returns two result files:
 # results/
+# -> checkpoint.jsonl   If the run was interrupted, checkpoint saves the state of the run
 # -> results.jsonl      Full information on each request
 # -> valid_emails.txt   Only emails that returned 250 / 251 (catch-all inclusive)
 #
@@ -13,4 +14,4 @@
 # They HAVE to resolve to a valid domain with required records for SMTP
 
 
-__version__ = "1.0.3"
+__version__ = "1.1.0"
