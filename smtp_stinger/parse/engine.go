@@ -14,19 +14,6 @@ import (
 // RFC-5321
 var EmailRegex = regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)
 
-// StreamParser defines the contract for all future format parsers
-type StreamParser interface {
-	Parse(r io.Reader, filePath string, resultsChan chan<- JobResult) error
-}
-
-// ParserRegistry maps lowercase file extensions (e.g., ".csv") to their parser implementations
-var ParserRegistry = make(map[string]StreamParser)
-
-// RegisterParser allows new formats to register themselves cleanly
-func RegisterParser(ext string, parser StreamParser) {
-	ParserRegistry[strings.ToLower(ext)] = parser
-}
-
 type ParseResult struct {
 	TotalRaw          int64
 	DuplicatesRemoved int64

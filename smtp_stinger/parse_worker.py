@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 PARSE_BINARY = Path(__file__).parent / "parse_worker"
-SUPPORTED_EXTENSIONS = {
+SUPPORTED_EXTENSIONS = {    # 39 total
     ".txt", ".csv", ".json", ".jsonl", ".yaml", ".yml", ".log",
     ".toml", ".ini", ".html", ".htm", ".docx", ".doc", ".tsv",
     ".xlsx", ".xls", ".pptx", ".ppt", ".odt", ".ods", ".odp",
