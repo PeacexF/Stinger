@@ -401,7 +401,9 @@ def _print_progress(done: int, total: int, pct: float, counters: dict):
               help="Number of parallel Go parsing workers")
 @click.option("--no-summary", is_flag=True, default=False,
               help="Suppress per-file breakdown, only show totals")
-def parse(sources, out, append, workers, no_summary):
+@click.option("--profile", is_flag=True, default=False,
+              help="Enable performance profiling for Go worker pool")
+def parse(sources, out, append, workers, no_summary, profile):
     """
     Extract and deduplicate emails from .txt and .csv files (Go-powered).
 
@@ -452,6 +454,7 @@ def parse(sources, out, append, workers, no_summary):
         output_path=out_path,
         workers=workers,
         append_to=append_source,
+        profile=profile, 
     )
 
     # Report

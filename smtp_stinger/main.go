@@ -6,6 +6,7 @@ import (
 	"os"
 
 	parse "github.com/PeacexF/Stinger/smtp_stinger/parse"
+	"github.com/PeacexF/Stinger/smtp_stinger/profiler"
 )
 
 type Job struct {
@@ -25,6 +26,27 @@ type Result struct {
 }
 
 func main() {
+	prof, err := profiler.Start()
+	if err != nil {
+		writeError("failed to start profiler: " + err.Error())
+		os.Exit(1)
+	}
+
+	defer prof.Recover()
+
+	defer func() {
+		if err := prof.Stop(); err != nil {
+			writeError("failed to stop profiler: " + err.Error())
+		}
+	}()
+
+	if err := run(); err != nil {
+		writeError(err.Error())
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	var job Job
 	if err := json.NewDecoder(os.Stdin).Decode(&job); err != nil {
 		writeError("failed to decode job: " + err.Error())
@@ -77,7 +99,7 @@ func main() {
 		PerFileUnique:     pr.PerFileUnique,
 		Error:             "",
 	}
-	json.NewEncoder(os.Stdout).Encode(out)
+	return json.NewEncoder(os.Stdout).Encode(out)
 }
 
 func writeError(msg string) {

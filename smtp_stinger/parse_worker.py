@@ -5,6 +5,8 @@
 from __future__ import annotations
 
 import json
+import sys
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -80,6 +82,7 @@ def run_parse(
     output_path: Path,
     workers: int = 4,
     append_to: Path | None = None,
+    profile: bool = False,
 ) -> ParseResult:
     # Collect files from sources, run the Go parse_worker binary,
     # and return a ParseResult. Output is written directly to output_path by Go.
@@ -120,6 +123,10 @@ def run_parse(
         "workers": workers,
     }
 
+    env = os.environ.copy()
+    if profile:
+        env["STINGER_PROFILE"] = "all"
+
     try:
         proc = subprocess.run(
             [str(PARSE_BINARY)],
@@ -127,6 +134,7 @@ def run_parse(
             capture_output=True,
             text=True,
             timeout=300,
+            env=env,
         )
     except subprocess.TimeoutExpired:
         return _err_result(skipped, "parse_worker timed out after 300s")
@@ -134,6 +142,10 @@ def run_parse(
         return _err_result(skipped, f"failed to start parse_worker: {e}")
 
     raw = proc.stdout.strip()
+    
+    if proc.stderr:
+        print(proc.stderr, file=sys.stderr)
+
     if not raw:
         stderr = proc.stderr.strip()
         return _err_result(skipped, f"parse_worker returned no output. stderr: {stderr}")

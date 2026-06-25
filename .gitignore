@@ -14,3 +14,4 @@ stinger.zip
 .pytest*
 .DS_Store
 .env
+profiles/
