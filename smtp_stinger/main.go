@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"os"
 
-	stinger "stinger/smtp_stinger/parse"
+	parse "stinger/smtp_stinger/parse"
 )
 
 type Job struct {
@@ -43,7 +43,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	pr, err := stinger.ParsePaths(job.Paths, job.OutputPath, job.Workers)
+	pr, err := parse.ParsePaths(job.Paths, job.OutputPath, job.Workers)
 	if err != nil {
 		writeError(err.Error())
 		os.Exit(1)

@@ -1,20 +1,22 @@
-package stinger
+package parse
 
 import (
 	"bufio"
-	"os"
+	"io"
 )
 
-// reads messy txt line by line and pulls out all emails.
-func ParseTXT(filePath string, resultsChan chan<- JobResult) error {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
+type TXTParser struct{}
 
-	scanner := bufio.NewScanner(file)
-	buf := make([]byte, 64*1024) // 64KB line buffer
+func init() {
+	parser := &TXTParser{}
+	RegisterParser(".txt", parser)
+	RegisterParser(".log", parser)
+	RegisterParser(".tsv", parser)
+}
+
+func (p *TXTParser) Parse(r io.Reader, filePath string, resultsChan chan<- JobResult) error {
+	scanner := bufio.NewScanner(r)
+	buf := make([]byte, 64*1024)
 	scanner.Buffer(buf, 64*1024)
 
 	for scanner.Scan() {

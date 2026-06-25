@@ -1,8 +1,9 @@
-package stinger
+package parse
 
 import (
 	"bufio"
 	"hash/fnv"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,6 +13,19 @@ import (
 
 // RFC-5321
 var EmailRegex = regexp.MustCompile(`[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}`)
+
+// StreamParser defines the contract for all future format parsers
+type StreamParser interface {
+	Parse(r io.Reader, filePath string, resultsChan chan<- JobResult) error
+}
+
+// ParserRegistry maps lowercase file extensions (e.g., ".csv") to their parser implementations
+var ParserRegistry = make(map[string]StreamParser)
+
+// RegisterParser allows new formats to register themselves cleanly
+func RegisterParser(ext string, parser StreamParser) {
+	ParserRegistry[strings.ToLower(ext)] = parser
+}
 
 type ParseResult struct {
 	TotalRaw          int64
@@ -47,11 +61,20 @@ func ParsePaths(paths []string, outputPath string, maxWorkers int) (*ParseResult
 			defer workerWg.Done()
 			for path := range jobChan {
 				ext := strings.ToLower(filepath.Ext(path))
-				if ext == ".csv" {
-					_ = ParseCSV(path, resultsChan)
-				} else {
-					_ = ParseTXT(path, resultsChan)
+
+				file, err := os.Open(path)
+				if err != nil {
+					continue
 				}
+
+				// Check if we have a dedicated parser registered
+				if parser, exists := ParserRegistry[ext]; exists {
+					_ = parser.Parse(file, path, resultsChan)
+				} else {
+					// Fall back to raw printable strings scanner
+					_ = FallbackStringsParse(file, path, resultsChan)
+				}
+				file.Close()
 			}
 		}()
 	}
@@ -109,4 +132,47 @@ func ParsePaths(paths []string, outputPath string, maxWorkers int) (*ParseResult
 	dedupWg.Wait()
 
 	return result, nil
+}
+
+// FallbackStringsParse extracts printable ASCII sequences from unknown or binary files
+func FallbackStringsParse(r io.Reader, filePath string, resultsChan chan<- JobResult) error {
+	scanner := bufio.NewScanner(r)
+
+	// Custom split function targeting consecutive printable ASCII blocks
+	scanner.Split(func(data []byte, atEOF bool) (advance int, token []byte, err error) {
+		start := -1
+		for i, b := range data {
+			// Printable ASCII range check
+			if b >= 33 && b <= 126 {
+				if start == -1 {
+					start = i
+				}
+			} else {
+				if start != -1 {
+					return i, data[start:i], nil
+				}
+			}
+		}
+		if atEOF && start != -1 && len(data) > start {
+			return len(data), data[start:], nil
+		}
+		return len(data), nil, nil
+	})
+
+	for scanner.Scan() {
+		word := scanner.Text()
+		if len(word) < 5 {
+			continue
+		}
+		if EmailRegex.MatchString(word) {
+			matches := EmailRegex.FindAllString(word, -1)
+			for _, email := range matches {
+				resultsChan <- JobResult{
+					FilePath: filePath,
+					Email:    email,
+				}
+			}
+		}
+	}
+	return scanner.Err()
 }

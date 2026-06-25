@@ -1,19 +1,18 @@
-package stinger
+package parse
 
 import (
 	"encoding/csv"
 	"io"
-	"os"
 )
 
-func ParseCSV(filePath string, resultsChan chan<- JobResult) error {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
+type CSVParser struct{}
 
-	reader := csv.NewReader(file)
+func init() {
+	RegisterParser(".csv", &CSVParser{})
+}
+
+func (p *CSVParser) Parse(r io.Reader, filePath string, resultsChan chan<- JobResult) error {
+	reader := csv.NewReader(r)
 	reader.FieldsPerRecord = -1
 	reader.ReuseRecord = true
 
@@ -23,8 +22,9 @@ func ParseCSV(filePath string, resultsChan chan<- JobResult) error {
 			break
 		}
 		if err != nil {
-			// Malformed CSV fallback
-			return ParseTXT(filePath, resultsChan)
+			// If CSV is malformed, pass the reader handle down to the text parser fallback
+			txtParser := &TXTParser{}
+			return txtParser.Parse(r, filePath, resultsChan)
 		}
 
 		for _, cell := range record {

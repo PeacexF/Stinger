@@ -10,7 +10,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 PARSE_BINARY = Path(__file__).parent / "parse_worker"
-SUPPORTED_EXTENSIONS = {".txt", ".csv"}
+SUPPORTED_EXTENSIONS = {
+    ".txt", ".csv"
+}
 
 
 @dataclass

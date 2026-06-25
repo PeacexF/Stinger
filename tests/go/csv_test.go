@@ -1,5 +1,7 @@
 package tests
 
+// WONT COMPILE
+
 import (
 	"os"
 	"path/filepath"
@@ -45,7 +47,7 @@ func TestParseCSV(t *testing.T) {
 
 			resultsChan := make(chan stinger.JobResult, 10)
 
-			err = stinger.ParseCSV(tmpFilePath, resultsChan)
+			err = stinger.Parse(tmpFilePath, resultsChan)
 			if err != nil {
 				t.Fatalf("ParseCSV returned an unexpected error: %v", err)
 			}
