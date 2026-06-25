@@ -13,4 +13,4 @@
 # They HAVE to resolve to a valid domain with required records for SMTP
 
 
-__version__ = "1.0.3"
+__version__ = "1.1.0"
