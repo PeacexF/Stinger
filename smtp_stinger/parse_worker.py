@@ -14,7 +14,7 @@ SUPPORTED_EXTENSIONS = {
     ".txt", ".csv", ".json", ".jsonl", ".yaml", ".yml", ".log",
     ".toml", ".ini", ".html", ".htm", ".docx", ".doc", ".tsv",
     ".xlsx", ".xls", ".pptx", ".ppt", ".odt", ".ods", ".odp",
-    ".pdf", ".eml", ".msg", ".mbox", ".sqlite", ".sqlite3",
+    ".pdf", ".eml", ".msg", ".mbox", ".sqlite", ".sqlite3", ".db",
 }
 
 
