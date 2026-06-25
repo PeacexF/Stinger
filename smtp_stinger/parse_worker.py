@@ -11,7 +11,7 @@ from pathlib import Path
 
 PARSE_BINARY = Path(__file__).parent / "parse_worker"
 SUPPORTED_EXTENSIONS = {
-    ".txt", ".csv", ".json", ".jsonl"
+    ".txt", ".csv", ".json", ".jsonl", ".yaml", ".yml",
 }
 
 
