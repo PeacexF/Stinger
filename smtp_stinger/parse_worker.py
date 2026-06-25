@@ -13,6 +13,7 @@ PARSE_BINARY = Path(__file__).parent / "parse_worker"
 SUPPORTED_EXTENSIONS = {
     ".txt", ".csv", ".json", ".jsonl", ".yaml", ".yml",
     ".toml", ".ini", ".html", ".htm", ".docx", ".doc",
+    ".xlsx",
 }
 
 
