@@ -16,8 +16,8 @@ func init() {
 
 func (p *TXTParser) Parse(r io.Reader, filePath string, resultsChan chan<- JobResult) error {
 	scanner := bufio.NewScanner(r)
-	buf := make([]byte, 64*1024)
-	scanner.Buffer(buf, 64*1024)
+	buf := make([]byte, 256*1024)
+	scanner.Buffer(buf, 256*1024)
 
 	for scanner.Scan() {
 		line := scanner.Text()
