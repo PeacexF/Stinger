@@ -3,12 +3,15 @@
 High-performance SMTP email verifier. Python async orchestration + Go low-level socket worker, packaged as a CLI tool.  
 
 ![Go](https://img.shields.io/badge/Go-00ADD8?logo=go&logoColor=white)
-![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)  
+![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
+![YAML](https://img.shields.io/badge/YAML-CB171E?logo=yaml&logoColor=white)  
 ![CLI](https://img.shields.io/badge/interface-CLI-black)
-![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg)  
+![MIT License](https://img.shields.io/badge/License-MIT-black.svg)  
 ![SMTP](https://img.shields.io/badge/protocol-SMTP-green)
 ![Email Verification](https://img.shields.io/badge/email-verification-success)
-![Catch-All Detection](https://img.shields.io/badge/catch--all-detection-orange)
+![Email Parsing](https://img.shields.io/badge/email-parsing-green)
+![Catch-All Detection](https://img.shields.io/badge/catch--all-detection-green)
+
 
 ---
 
