@@ -15,6 +15,7 @@ SUPPORTED_EXTENSIONS = {
     ".toml", ".ini", ".html", ".htm", ".docx", ".doc", ".tsv",
     ".xlsx", ".xls", ".pptx", ".ppt", ".odt", ".ods", ".odp",
     ".pdf", ".eml", ".msg", ".mbox", ".sqlite", ".sqlite3", ".db",
+    ".zip", ".7z",
 }
 
 
