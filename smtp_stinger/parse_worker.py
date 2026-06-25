@@ -11,10 +11,10 @@ from pathlib import Path
 
 PARSE_BINARY = Path(__file__).parent / "parse_worker"
 SUPPORTED_EXTENSIONS = {
-    ".txt", ".csv", ".json", ".jsonl", ".yaml", ".yml",
-    ".toml", ".ini", ".html", ".htm", ".docx", ".doc",
-    ".xlsx", ".xls", ".pptx", ".ppt", ".odt", ".ods",
-    ".odp", ".pdf",
+    ".txt", ".csv", ".json", ".jsonl", ".yaml", ".yml", ".log",
+    ".toml", ".ini", ".html", ".htm", ".docx", ".doc", ".tsv",
+    ".xlsx", ".xls", ".pptx", ".ppt", ".odt", ".ods", ".odp",
+    ".pdf", ".eml",
 }
 
 
