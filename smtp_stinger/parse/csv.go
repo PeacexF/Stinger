@@ -1,7 +1,7 @@
 package parse
 
 import (
-	"bufio" // Добавили импорт bufio
+	"bufio"
 	"encoding/csv"
 	"io"
 )

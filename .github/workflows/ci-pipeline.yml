@@ -8,9 +8,6 @@ on:
 
 jobs:
   go:
-    # Turned of for now due to changes in function names and the addition of the registry system
-    # New tests as soon as the parsing system is fully built
-    if: false
     name: Go tests
     runs-on: ubuntu-latest
 

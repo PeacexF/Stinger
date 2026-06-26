@@ -1,74 +1,84 @@
 package tests
 
-// WONT COMPILE
-
 import (
-	"os"
-	"path/filepath"
+	"bytes"
+	"errors"
 	"testing"
 
-	parse "github.com/PeacexF/Stinger/smtp_stinger/parse"
+	"github.com/PeacexF/Stinger/smtp_stinger/parse"
 )
 
-func TestParseTXT(t *testing.T) {
-	tests := []struct {
-		name           string
-		txtContent     string
-		expectedEmails []string
-	}{
-		{
-			name: "Standard Plaintext Parsing",
-			txtContent: "Hello admin@target.com, please find the logs attached.\n" +
-				"Contact support@stinger.dev if you have errors.\n",
-			expectedEmails: []string{"admin@target.com", "support@stinger.dev"},
-		},
-		{
-			name:           "Handles Lines with No Emails",
-			txtContent:     "This is a sample text line containing nothing important.\n\nThird line here.",
-			expectedEmails: nil,
-		},
-		{
-			name:           "Extracts Multiple Entries per Single Line",
-			txtContent:     "info@corp.ru,sales@corp.ru;billing@corp.ru",
-			expectedEmails: []string{"info@corp.ru", "sales@corp.ru", "billing@corp.ru"},
-		},
+// simulates an io.Reader that returns an error
+type ErroneousReader struct{}
+
+func (e *ErroneousReader) Read(p []byte) (n int, err error) {
+	return 0, errors.New("simulated read error")
+}
+
+func TestTXTParser_Registration(t *testing.T) {
+	extensions := []string{".txt", ".log", ".tsv"}
+
+	for _, ext := range extensions {
+		parser, exists := parse.ParserRegistry[ext]
+		if !exists {
+			t.Fatalf("Expected TXTParser to be registered for '%s'", ext)
+		}
+
+		if _, ok := parser.(*parse.TXTParser); !ok {
+			t.Errorf("Expected registered parser for '%s' to be of type *TXTParser, got %T", ext, parser)
+		}
+	}
+}
+
+func TestTXTParser_Parse_ValidTextWithEmails(t *testing.T) {
+	parser := &parse.TXTParser{}
+
+	textContent := "admin@site.com\n" +
+		"some random text here\n" +
+		"support@company.org mixed within text, info@domain.io\n"
+
+	r := bytes.NewBufferString(textContent)
+	resultsChan := make(chan parse.JobResult, 10)
+
+	err := parser.Parse(r, "test.log", resultsChan)
+	if err != nil {
+		t.Fatalf("Expected no error during text parsing, got: %v", err)
+	}
+	close(resultsChan)
+
+	expectedEmails := map[string]bool{
+		"admin@site.com":      true,
+		"support@company.org": true,
+		"info@domain.io":      true,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			tmpFilePath := filepath.Join(tmpDir, "messy_source.txt")
+	count := 0
+	for res := range resultsChan {
+		count++
+		if res.FilePath != "test.log" {
+			t.Errorf("Expected FilePath 'test.log', got '%s'", res.FilePath)
+		}
+		if !expectedEmails[res.Email] {
+			t.Errorf("Unexpected email found: %s", res.Email)
+		}
+	}
 
-			err := os.WriteFile(tmpFilePath, []byte(tt.txtContent), 0644)
-			if err != nil {
-				t.Fatalf("failed to create fixture file: %v", err)
-			}
+	if count != 3 {
+		t.Errorf("Expected 3 email matches, got %d", count)
+	}
+}
 
-			resultsChan := make(chan parse.JobResult, 10)
+func TestTXTParser_Parse_ScannerError(t *testing.T) {
+	parser := &parse.TXTParser{}
+	r := &ErroneousReader{}
+	resultsChan := make(chan parse.JobResult, 10)
 
-			err = parse.Parse(tmpFilePath, resultsChan)
-			if err != nil {
-				t.Fatalf("ParseTXT returned an unexpected error: %v", err)
-			}
-			close(resultsChan)
+	err := parser.Parse(r, "error.txt", resultsChan)
+	if err == nil {
+		t.Fatal("Expected scanner error from ErroneousReader, got nil")
+	}
 
-			var actualEmails []string
-			for res := range resultsChan {
-				if res.FilePath != tmpFilePath {
-					t.Errorf("expected FilePath %q, got %q", tmpFilePath, res.FilePath)
-				}
-				actualEmails = append(actualEmails, res.Email)
-			}
-
-			if len(actualEmails) != len(tt.expectedEmails) {
-				t.Fatalf("expected %d emails, got %d: %v", len(tt.expectedEmails), len(actualEmails), actualEmails)
-			}
-
-			for i, email := range actualEmails {
-				if email != tt.expectedEmails[i] {
-					t.Errorf("at index %d: expected %q, got %q", i, tt.expectedEmails[i], email)
-				}
-			}
-		})
+	if err.Error() != "simulated read error" {
+		t.Errorf("Expected 'simulated read error', got: %v", err)
 	}
 }

@@ -1,75 +1,74 @@
 package tests
 
-// WONT COMPILE
-
 import (
-	"os"
-	"path/filepath"
+	"bytes"
 	"testing"
 
-	parse "github.com/PeacexF/Stinger/smtp_stinger/parse"
+	"github.com/PeacexF/Stinger/smtp_stinger/parse"
 )
 
-func TestParseCSV(t *testing.T) {
-	tests := []struct {
-		name           string
-		csvContent     string
-		expectedEmails []string
-	}{
-		{
-			name: "Standard Clean CSV Parsing",
-			csvContent: "id,name,email\n" +
-				"1,Alex,alex@stinger.com\n" +
-				"2,Bob,bob@victim.ru\n",
-			expectedEmails: []string{"alex@stinger.com", "bob@victim.ru"},
-		},
-		{
-			name:           "Skips Short Cells and Garbage",
-			csvContent:     "short,a@b,no_at_sign,valid@target.org",
-			expectedEmails: []string{"valid@target.org"},
-		},
-		{
-			name:           "Extracts Multiple Emails From One Cell",
-			csvContent:     "1,admin@corp.com;billing@corp.com,active",
-			expectedEmails: []string{"admin@corp.com", "billing@corp.com"},
-		},
+func TestCSVParser_Registration(t *testing.T) {
+	parser, exists := parse.ParserRegistry[".csv"]
+	if !exists {
+		t.Fatal("Expected CSVParser to be registered for '.csv'")
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tmpDir := t.TempDir()
-			tmpFilePath := filepath.Join(tmpDir, "test_data.csv")
+	if _, ok := parser.(*parse.CSVParser); !ok {
+		t.Errorf("Expected registered parser to be of type *CSVParser, got %T", parser)
+	}
+}
 
-			err := os.WriteFile(tmpFilePath, []byte(tt.csvContent), 0644)
-			if err != nil {
-				t.Fatalf("failed to create fixture file: %v", err)
-			}
+func TestCSVParser_Parse_ValidCSVWithEmails(t *testing.T) {
+	parser := &parse.CSVParser{}
 
-			resultsChan := make(chan parse.JobResult, 10)
+	csvData := "test@example.com,short,abc\n" +
+		"valid@domain.org,another.valid+filter@gmail.com,123\n" +
+		"no-email-here,processing,data\n"
 
-			err = parse.Parse(tmpFilePath, resultsChan)
-			if err != nil {
-				t.Fatalf("ParseCSV returned an unexpected error: %v", err)
-			}
-			close(resultsChan)
+	r := bytes.NewBufferString(csvData)
+	resultsChan := make(chan parse.JobResult, 10)
 
-			var actualEmails []string
-			for res := range resultsChan {
-				if res.FilePath != tmpFilePath {
-					t.Errorf("expected FilePath %q, got %q", tmpFilePath, res.FilePath)
-				}
-				actualEmails = append(actualEmails, res.Email)
-			}
+	err := parser.Parse(r, "test.csv", resultsChan)
+	if err != nil {
+		t.Fatalf("Expected no error during CSV parsing, got: %v", err)
+	}
+	close(resultsChan)
 
-			if len(actualEmails) != len(tt.expectedEmails) {
-				t.Fatalf("expected %d emails, got %d: %v", len(tt.expectedEmails), len(actualEmails), actualEmails)
-			}
+	expectedEmails := map[string]bool{
+		"test@example.com":               true,
+		"valid@domain.org":               true,
+		"another.valid+filter@gmail.com": true,
+	}
 
-			for i, email := range actualEmails {
-				if email != tt.expectedEmails[i] {
-					t.Errorf("at index %d: expected %q, got %q", i, tt.expectedEmails[i], email)
-				}
-			}
-		})
+	count := 0
+	for res := range resultsChan {
+		count++
+		if res.FilePath != "test.csv" {
+			t.Errorf("Expected FilePath 'test.csv', got '%s'", res.FilePath)
+		}
+		if !expectedEmails[res.Email] {
+			t.Errorf("Unexpected email found: %s", res.Email)
+		}
+	}
+
+	if count != 3 {
+		t.Errorf("Expected 3 email matches, got %d", count)
+	}
+}
+
+func TestCSVParser_Parse_MalformedCSVFallback(t *testing.T) {
+	parser := &parse.CSVParser{}
+
+	// Bare quotes forcing fallback
+	malformedCSV := `header1,header2` + "\n" + `wrong"field,valid@fallback.com`
+
+	r := bytes.NewBufferString(malformedCSV)
+	resultsChan := make(chan parse.JobResult, 10)
+
+	// csv.Reader fails, delegates to TXTParser
+	// verify that the chain completes
+	err := parser.Parse(r, "malformed.csv", resultsChan)
+	if err != nil {
+		t.Fatalf("Expected fallback to TXTParser to handle malformed CSV smoothly, got error: %v", err)
 	}
 }
