@@ -28,7 +28,7 @@ jobs:
           fi
           go mod download
 
-      - name: Run Low-Level Network Tests
+      - name: Run Tests
         run: go test -race -v -covermode=atomic -coverprofile=coverage.txt ./...
 
   python:

@@ -140,10 +140,18 @@ func FallbackStringsParse(r io.Reader, filePath string, resultsChan chan<- JobRe
 				}
 			}
 		}
-		if atEOF && start != -1 && len(data) > start {
-			return len(data), data[start:], nil
+
+		if start != -1 {
+			if atEOF {
+				return len(data), data[start:], nil
+			}
+			return start, nil, nil
 		}
-		return len(data), nil, nil
+
+		if atEOF {
+			return len(data), nil, nil
+		}
+		return 0, nil, nil
 	})
 
 	for scanner.Scan() {
