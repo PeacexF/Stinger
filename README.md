@@ -29,6 +29,7 @@ Stinger checks whether mailboxes exist by asking their mail servers directly. It
 - [Performance and tuning](#performance-and-tuning)
 - [Development](#development)
 - [Responsible use](#responsible-use)
+- [Disclaimer](DISCLAIMER.md)
 - [License](#license)
 
 ---
@@ -455,6 +456,8 @@ gofmt -l .              # should print nothing
 ## Responsible use
 
 SMTP verification talks to other people's mail servers. Only verify lists you have a legitimate reason to hold, such as your own customers, sign-ups or CRM data. Respect rate limits, and follow applicable law (GDPR, CAN-SPAM and similar) and your hosting provider's acceptable use policy. Aggressive settings will get your IP blocklisted.
+
+Read the full **[DISCLAIMER](DISCLAIMER.md)** before using Stinger.
 
 ---
 
