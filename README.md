@@ -50,13 +50,23 @@ Stinger checks whether mailboxes exist by asking their mail servers directly. It
 
 ## Requirements
 
-- **Go 1.26+** to build.
+- **Go 1.26+**, only if you build from source.
 - **A server that can make outbound connections on port 25.** Most residential ISPs block it, and so do many cloud providers (AWS, GCP, Azure) until you ask them to lift the block. A VPS from a provider that allows port 25 works best.
 - **A domain you control**, with an A record, a matching PTR (reverse DNS) record and an SPF record. See [DNS setup](#dns-setup).
 
 ---
 
 ## Installation
+
+**Homebrew** (macOS and Linux):
+
+```bash
+brew install --cask PeacexF/tap/stinger
+```
+
+**Prebuilt binaries** for Linux, macOS and Windows are attached to every [GitHub release](https://github.com/PeacexF/Stinger/releases).
+
+**From source:**
 
 ```bash
 git clone https://github.com/PeacexF/Stinger
@@ -446,6 +456,8 @@ go test -race ./...     # run the test suite
 go vet ./...
 gofmt -l .              # should print nothing
 ```
+
+**Releasing:** push a `v*` tag, for example `git tag v1.2.0 && git push origin v1.2.0`. The release workflow runs the tests, then GoReleaser builds the archives, publishes a GitHub release and updates the cask in [PeacexF/homebrew-tap](https://github.com/PeacexF/homebrew-tap). Dependabot opens weekly PRs for Go modules and GitHub Actions.
 
 **Profiling `parse`:** pass `--profile`, or set `STINGER_PROFILE` to `all` or a list such as `cpu,heap,trace`. Profiles are written to `./profiles`.
 

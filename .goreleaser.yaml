@@ -1,0 +1,74 @@
+# GoReleaser config: builds release archives and publishes the Homebrew cask.
+# Docs: https://goreleaser.com
+version: 2
+
+project_name: stinger
+
+builds:
+  - id: stinger
+    main: ./cmd/stinger
+    binary: stinger
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    ignore:
+      - goos: windows
+        goarch: arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/PeacexF/Stinger/internal/cli.Version={{ .Version }}
+
+archives:
+  - ids: [stinger]
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - README.md
+      - LICENSE
+      - DISCLAIMER.md
+      - config_EXAMPLE.yaml
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - "Merge pull request"
+
+release:
+  footer: |
+    **Homebrew:** `brew install --cask PeacexF/tap/stinger`
+
+homebrew_casks:
+  - name: stinger
+    binaries: [stinger]
+    repository:
+      owner: PeacexF
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Casks
+    homepage: https://github.com/PeacexF/Stinger
+    description: High-performance SMTP email verifier
+    license: MIT
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "stinger {{ .Tag }}"
+    # Binaries aren't notarized; drop the quarantine flag so macOS will run them
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/stinger"]
+          end
