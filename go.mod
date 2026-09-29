@@ -4,11 +4,11 @@ go 1.26.2
 
 require (
 	github.com/dslipak/pdf v0.0.2
-	github.com/nwaples/rardecode/v2 v2.2.5
+	github.com/nwaples/rardecode/v2 v2.4.1
 	github.com/saracen/go7z v0.0.0-20191010121135-9c09b6bd7fda
 	github.com/spf13/cobra v1.10.2
-	github.com/ulikunitz/xz v0.5.15
-	golang.org/x/net v0.56.0
+	github.com/ulikunitz/xz v0.5.17
+	golang.org/x/net v0.59.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
