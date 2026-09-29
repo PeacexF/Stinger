@@ -1,9 +1,8 @@
 # SMTP-Stinger
 
-High-performance SMTP email verifier. Python async orchestration + Go low-level socket worker, packaged as a CLI tool.  
+High-performance SMTP email verifier, shipped as a single Go binary.  
 
 ![Go](https://img.shields.io/badge/Go-00ADD8?logo=go&logoColor=white)
-![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
 ![YAML](https://img.shields.io/badge/YAML-CB171E?logo=yaml&logoColor=white)  
 ![CLI](https://img.shields.io/badge/interface-CLI-black)
 ![MIT License](https://img.shields.io/badge/License-MIT-black.svg)  
@@ -21,11 +20,9 @@ High-performance SMTP email verifier. Python async orchestration + Go low-level 
 git clone https://github.com/PeacexF/Stinger
 cd Stinger
 
-# Install Python package
-pip install -e .
-
-# Compile the Go worker (requires Go)
-stinger build
+# Build and install the binary (requires Go 1.26+) into $(go env GOPATH)/bin
+go install ./cmd/stinger
+# or build it in place:  go build -o stinger ./cmd/stinger
 
 # Create config
 stinger init
@@ -33,9 +30,12 @@ stinger init
 # Fill in helo_hostname and mail_from in config.yaml, then validate
 stinger doctor
 
-# Parse your list of emails into a list of `emails_file` in config
-# Beforehand, make a dir in the Stinger/ with all the .csv and .txt files that contain emails that need to be checked
-stinger parse ./emails/*
+# Parse your source files into the `emails_file` from config
+# Put every file that contains emails into a directory first (see `stinger parse` for formats)
+stinger parse ./emails
+
+# Verify
+stinger check
 ```
 
 ---
@@ -49,16 +49,6 @@ make a `config.yaml` in the current directory.
 stinger init                      # → ./config.yaml
 stinger init /path/to/cfg.yaml    # custom location
 ```
-
----
-
-### `stinger build`
-Compile the Go SMTP worker binary. Run once after install and after any update to `smtp_worker.go`.
-
-```bash
-stinger build
-```
-[Requires Go](https://go.dev/dl/)
 
 ---
 
@@ -97,14 +87,18 @@ Example output:
 
 ### `stinger parse`
 Recommended usage:  
-make a directory with all your email-filled files (.csv and .txt supported)  
+make a directory with all your email-filled files and point `parse` at it (directories are walked recursively).
 
-Run command:
+Supported formats: txt, csv, tsv, log, json/jsonl, yaml, toml, ini, html, eml, msg, mbox, ldif, vcf,
+doc/docx, xls/xlsx, ppt/pptx, odt/ods/odp, pdf, sqlite/db, and archives (zip, 7z, rar, tar, tar.gz/tgz, gz, bz2, xz).
+
 ```bash
-stinger parse ./emails/*
+stinger parse ./emails                          # → emails.txt
+stinger parse ./emails --out list.txt
+stinger parse new.csv --out list.txt --append   # merge + dedupe into an existing list
+stinger parse ./emails --workers 8
+stinger parse ./emails --profile                # write pprof/trace profiles to ./profiles
 ```
-
-All parsed emails are now in the **emails_file** from config
 
 Example output:
 ```bash
@@ -139,7 +133,11 @@ stinger check emails.txt --per-domain 1 # override per-domain limit
 stinger check emails.txt --no-progress  # suppress progress bar
 stinger check emails.txt --dry-run      # count + deduplicate, no SMTP
 stinger check --config /path/cfg.yaml emails.txt
+stinger check emails.txt --resume results/checkpoint.jsonl
 ```
+
+Ctrl+C once stops dispatching and waits for in-flight checks; press it again to abandon them.
+Either way a `checkpoint.jsonl` is written to the output directory, and `--resume` skips everything already checked.
 
 Live progress bar during run:
 ```
@@ -201,42 +199,24 @@ for more info on commands, run: `stinger [cmd] --help`
 ## Project structure
 
 ```
-├── go.mod
-├── pyproject.toml
-├── requirements.txt
-├── config.yaml             configuration, created by `stinger init`
-├── emails/                 folder with the initial emails list (recommended)
-│   ├── hotmail.txt
-│   └── orders.csv
-├── results/                
-│   ├── results.jsonl       full data on the checked emails
-│   └── valid_emails.txt    valid (250/251 code) checked emails
-├── emails.txt              parsed, deduplicated list of emails
-├── smtp_worker.go          smtp probe -> smtp_worker
-├── smtp_stinger/
-│   ├── __init__.py         version
-│   ├── builder.py          build go binaries
-│   ├── cli.py              cli module
-│   ├── config.py           config creation
-│   ├── dns_cache.py        DNS helpers and caching
-│   ├── doctor.py           validation of records
-│   ├── models.py           shared models
-│   ├── output.py           output writters
-│   ├── parse_worker.py     calls the parse_worker go binary
-│   ├── verifier.py         core verifier
-│   ├── worker.py           calls the smtp_worker go binary
-│   ├── parse_worker        go binaries, both built by `stinger build`
-│   ├── smtp_worker
-│   ├── main.go             main parsing module -> parse_worker
-│   ├── parse/
-│   │   ├── csv.go          csv parse
-│   │   ├── engine.go       parsing coordination
-│   │   └── txt.go          txt parse
-├── tests/                  everything below is for testing purposes only
-│   ├── go/
-│   └── python/
-└── smtp_worker_test.go
+├── cmd/stinger/            main package (the `stinger` binary)
+├── internal/
+│   ├── cli/                cobra commands: init, doctor, check, parse, stats
+│   ├── config/             config.yaml loading, defaults, template
+│   ├── resolver/           DNS against explicit resolvers + MX / catch-all caches
+│   ├── smtp/               single RCPT TO probe (EHLO, STARTTLS, MAIL FROM, RCPT TO)
+│   ├── verify/             statuses, classification, catch-all detection, retries, limits
+│   ├── output/             valid_emails.txt / results.jsonl writer, stats summary
+│   ├── checkpoint/         interrupt / resume state
+│   ├── doctor/             A / PTR / SPF / MX checks
+│   ├── parse/              concurrent email extraction for ~40 file formats + dedup
+│   ├── profiler/           optional pprof / trace profiling (STINGER_PROFILE)
+│   └── ui/                 terminal colours
+├── config_EXAMPLE.yaml
+└── go.mod
 ```
+
+Run the tests with `go test -race ./...`.
 
 ---
 
@@ -246,8 +226,8 @@ for more info on commands, run: `stinger [cmd] --help`
 smtp:
   helo_hostname: "mail.yourdomain.com"  # REQUIRED — domain with A + PTR + SPF
   mail_from: "verify@yourdomain.com"    # REQUIRED — sender address
-  connect_timeout_sec: 10
-  command_timeout_sec: 15
+  connect_timeout_sec: 10     # TCP connect timeout
+  command_timeout_sec: 15     # timeout for each SMTP command / response
   port: 25
   try_tls: true
 
@@ -258,7 +238,7 @@ concurrency:
 dns:
   mx_cache_ttl: 3600          # seconds to cache MX records
   catch_all_cache_ttl: 3600   # seconds to cache catch-all probe results
-  resolvers: []               # leave empty for system default
+  resolvers: []               # empty → 1.1.1.1 and 8.8.8.8
 
 retry:
   max_attempts: 3             # total attempts per email (across all MX)
@@ -291,6 +271,7 @@ One JSON object per line for every email processed:
 {
   "email": "alice@example.com",
   "status": "valid",
+  "sub_status": "confirmed",
   "smtp_code": 250,
   "smtp_message": "2.1.5 OK",
   "mx_used": "mx1.example.com",
@@ -309,7 +290,7 @@ One JSON object per line for every email processed:
 | `catch_all` | 250/251, but domain accepts anything |
 | `invalid` | 550–554 permanent rejection |
 | `unknown` | Temp failure / greylisted after all retries |
-| `error` | Could not connect or worker crashed |
+| `error` | Reserved; connection failures are reported as `unknown` / `connect_failed` |
 
 ---
 

@@ -17,8 +17,8 @@ smtp:
   mail_from: ""              # e.g. "stinger@yourdomain.com"
 
   # Connection settings
-  connect_timeout_sec: 10
-  command_timeout_sec: 15
+  connect_timeout_sec: 10   # TCP connect timeout
+  command_timeout_sec: 15   # timeout for each SMTP command / response
   port: 25                   # 25 for direct MX, 587 for submission (rare)
   try_tls: true              # attempt STARTTLS where offered
 
@@ -32,7 +32,7 @@ dns:
   # How long to cache MX lookups and catch-all results (seconds)
   mx_cache_ttl: 3600
   catch_all_cache_ttl: 3600
-  # DNS resolvers to use (leave empty to use system default)
+  # DNS resolvers to use (leave empty to use 1.1.1.1 and 8.8.8.8)
   resolvers: []
   # - "8.8.8.8"
   # - "1.1.1.1"
